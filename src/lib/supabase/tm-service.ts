@@ -304,7 +304,8 @@ async function updateTMEntryCount(tmId: string): Promise<void> {
 }
 
 /**
- * Import multiple TM entries (from TMX file) - Batch insert
+ * Import multiple TM entries (from TMX file) - Batch upsert
+ * Requires unique constraint: (tm_id, source, target_lang)
  */
 export async function importTMEntries(
   tmId: string,
@@ -322,9 +323,10 @@ export async function importTMEntries(
     target_lang: targetLang,
     prev_source: entry.prevSource || null,
     next_source: entry.nextSource || null,
+    updated_at: new Date().toISOString(),
   }));
 
-  // Batch insert in chunks of 500 (Supabase limit)
+  // Batch upsert in chunks of 500 (Supabase limit)
   const chunkSize = 500;
   let totalImported = 0;
 
@@ -333,7 +335,9 @@ export async function importTMEntries(
 
     const { data, error } = await supabase
       .from('tm_entries')
-      .insert(chunk)
+      .upsert(chunk, {
+        onConflict: 'tm_id,source,target_lang',
+      })
       .select();
 
     if (error) {
