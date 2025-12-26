@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useMemo } from "react"
 import { toast } from "sonner"
+import Image from "next/image"
+import { useAuth } from "@/components/auth/AuthProvider"
 import type {
   Segment,
   TMEntry,
@@ -50,6 +52,8 @@ import {
 type StatusFilter = "all" | "new" | "translated" | "confirmed"
 
 export default function CATToolPage() {
+  const { user, signOut, loading: authLoading } = useAuth()
+
   // State
   const [segments, setSegments] = useState<Segment[]>([])
   const [tm, setTm] = useState<TMEntry[]>(SAMPLE_TM)
@@ -410,27 +414,55 @@ export default function CATToolPage() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            {(["editor", "analysis", "qa", "tm", "termbase"] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => {
-                  setView(v)
-                  setSearchTerm("")
-                }}
-                className={cn(
-                  "px-4 py-2 rounded transition",
-                  view === v ? "bg-teal-600" : "bg-slate-700 hover:bg-slate-600",
-                  v === "qa" && qaIssues.filter((i) => !i.ignored).length > 0 && view !== v && "ring-2 ring-yellow-500"
-                )}
-              >
-                {v === "editor" && "Editor"}
-                {v === "analysis" && "Analysis"}
-                {v === "qa" && `QA ${qaIssues.filter((i) => !i.ignored).length > 0 ? `(${qaIssues.filter((i) => !i.ignored).length})` : ""}`}
-                {v === "tm" && `TM (${tm.length})`}
-                {v === "termbase" && `TB (${termbase.length})`}
-              </button>
-            ))}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              {(["editor", "analysis", "qa", "tm", "termbase"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => {
+                    setView(v)
+                    setSearchTerm("")
+                  }}
+                  className={cn(
+                    "px-4 py-2 rounded transition",
+                    view === v ? "bg-teal-600" : "bg-slate-700 hover:bg-slate-600",
+                    v === "qa" && qaIssues.filter((i) => !i.ignored).length > 0 && view !== v && "ring-2 ring-yellow-500"
+                  )}
+                >
+                  {v === "editor" && "Editor"}
+                  {v === "analysis" && "Analysis"}
+                  {v === "qa" && `QA ${qaIssues.filter((i) => !i.ignored).length > 0 ? `(${qaIssues.filter((i) => !i.ignored).length})` : ""}`}
+                  {v === "tm" && `TM (${tm.length})`}
+                  {v === "termbase" && `TB (${termbase.length})`}
+                </button>
+              ))}
+            </div>
+
+            {/* User Info */}
+            {user && (
+              <div className="flex items-center gap-3 pl-4 border-l border-slate-600">
+                <div className="flex items-center gap-2">
+                  {user.user_metadata?.avatar_url && (
+                    <Image
+                      src={user.user_metadata.avatar_url}
+                      alt="Profile"
+                      width={32}
+                      height={32}
+                      className="rounded-full"
+                    />
+                  )}
+                  <span className="text-sm text-slate-300">
+                    {user.user_metadata?.full_name || user.email}
+                  </span>
+                </div>
+                <button
+                  onClick={signOut}
+                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm text-slate-300 transition"
+                >
+                  Logout
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </header>
