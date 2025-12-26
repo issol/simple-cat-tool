@@ -5,18 +5,19 @@ import { toast } from "sonner"
 import Image from "next/image"
 import { useAuth } from "@/components/auth/AuthProvider"
 import {
-  fetchUserTMs,
-  fetchUserTM,
-  fetchTMEntries,
   fetchAllTMEntriesForMatching,
-  createTM,
-  deleteTM,
-  addTMEntry,
-  deleteTMEntryById,
-  importTMEntries,
   type TranslationMemory,
   type DBTMEntry,
 } from "@/lib/supabase/tm-service"
+import {
+  useTMList,
+  useTMEntries,
+  useCreateTM,
+  useDeleteTM,
+  useAddTMEntry,
+  useDeleteTMEntry,
+  useImportTMEntries,
+} from "@/lib/hooks/use-tm"
 import {
   fetchUserTermbase,
   fetchUserTermbaseWithDetails,
@@ -82,8 +83,17 @@ import {
   getIssueTypeName,
   getIssueSeverityColor,
 } from "@/lib/qa-checks"
+import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 
 type StatusFilter = "all" | "new" | "translated" | "confirmed"
+
+// Delete confirmation state type
+type DeleteConfirmState = {
+  type: 'tm' | 'tm-entry' | null;
+  id: string | null;
+  name?: string;
+  tmId?: string;
+}
 
 export default function CATToolPage() {
   const { user, signOut, loading: authLoading, isConfigured } = useAuth()
@@ -91,10 +101,8 @@ export default function CATToolPage() {
   // State
   const [segments, setSegments] = useState<Segment[]>([])
 
-  // TM State (container structure)
-  const [tmList, setTmList] = useState<TranslationMemory[]>([])
+  // TM State (container structure) - Using TanStack Query
   const [selectedTM, setSelectedTM] = useState<TranslationMemory | null>(null)
-  const [tmEntries, setTmEntries] = useState<DBTMEntry[]>([])
   const [tm, setTm] = useState<TMEntry[]>([]) // For matching (all entries from selected TMs)
   const [showTMModal, setShowTMModal] = useState(false)
   const [newTMName, setNewTMName] = useState("")
@@ -104,6 +112,10 @@ export default function CATToolPage() {
     string | undefined
   >(undefined)
   const [tmEditMode, setTmEditMode] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>({
+    type: null,
+    id: null,
+  })
 
   // Termbase State
   const [termbase, setTermbase] = useState<TermbaseEntry[]>([])
@@ -112,34 +124,39 @@ export default function CATToolPage() {
   // Client State
   const [clients, setClients] = useState<Client[]>([])
   const [selectedClient, setSelectedClient] = useState<string | null>(null)
-  const [dataLoading, setDataLoading] = useState(false)
   const [showClientModal, setShowClientModal] = useState(false)
   const [newClientName, setNewClientName] = useState("")
   const [newClientDesc, setNewClientDesc] = useState("")
 
-  // Fetch clients, TM, and Termbase from Supabase when logged in
+  // TanStack Query - TM List & Entries
+  const {
+    data: tmList = [],
+    isLoading: tmListLoading,
+    refetch: refetchTMList,
+  } = useTMList(user && isConfigured ? selectedClient : undefined)
+
+  const {
+    data: tmEntries = [],
+    isLoading: tmEntriesLoading,
+  } = useTMEntries(selectedTM?.id || null)
+
+  // TM Mutations
+  const createTMMutation = useCreateTM()
+  const deleteTMMutation = useDeleteTM()
+  const addTMEntryMutation = useAddTMEntry()
+  const deleteTMEntryMutation = useDeleteTMEntry()
+  const importTMEntriesMutation = useImportTMEntries()
+
+  const dataLoading = tmListLoading
+
+  // Fetch clients and Termbase from Supabase when logged in
   useEffect(() => {
     async function loadData() {
       if (user && isConfigured) {
-        setDataLoading(true)
         try {
           // Fetch clients
           const userClients = await fetchUserClients()
           setClients(userClients)
-
-          // Fetch TM list (filtered by selected client)
-          const userTMs = await fetchUserTMs(selectedClient)
-          setTmList(userTMs)
-
-          // Fetch all TM entries for matching
-          if (userTMs.length > 0) {
-            const allEntries = await fetchAllTMEntriesForMatching(
-              userTMs.map((t) => t.id)
-            )
-            setTm(allEntries)
-          } else {
-            setTm([])
-          }
 
           // Fetch Termbase (filtered by selected client)
           const userTermbase = await fetchUserTermbase(selectedClient)
@@ -153,12 +170,9 @@ export default function CATToolPage() {
         } catch (error) {
           console.error("Failed to load data:", error)
         }
-        setDataLoading(false)
       } else {
         // Clear data when logged out
-        setTmList([])
         setSelectedTM(null)
-        setTmEntries([])
         setTm([])
         setTermbase([])
         setTermbaseDB([])
@@ -167,6 +181,21 @@ export default function CATToolPage() {
     }
     loadData()
   }, [user, isConfigured, selectedClient])
+
+  // Load TM entries for matching when TM list changes
+  useEffect(() => {
+    async function loadTMForMatching() {
+      if (tmList.length > 0) {
+        const allEntries = await fetchAllTMEntriesForMatching(
+          tmList.map((t) => t.id)
+        )
+        setTm(allEntries)
+      } else {
+        setTm([])
+      }
+    }
+    loadTMForMatching()
+  }, [tmList])
   const [activeSegment, setActiveSegment] = useState<number>(0)
   const [view, setView] = useState<ViewType>("editor")
   const [fileName, setFileName] = useState<string>("")
@@ -391,7 +420,11 @@ export default function CATToolPage() {
 
         // Save to Supabase if user is logged in and a TM is selected
         if (user && isConfigured && selectedTM) {
-          addTMEntry(selectedTM.id, tmEntryWithContext, targetLang)
+          addTMEntryMutation.mutate({
+            tmId: selectedTM.id,
+            entry: tmEntryWithContext,
+            targetLang,
+          })
         }
       }
 
@@ -474,11 +507,11 @@ export default function CATToolPage() {
 
       // Save imported entries to Supabase if user is logged in and TM is selected
       if (user && isConfigured && selectedTM && imported.length > 0) {
-        const savedCount = await importTMEntries(
-          selectedTM.id,
-          imported,
-          targetLang
-        )
+        const savedCount = await importTMEntriesMutation.mutateAsync({
+          tmId: selectedTM.id,
+          entries: imported,
+          targetLang,
+        })
         toast.success(`${savedCount}개 TM 항목이 저장되었습니다`)
       }
     }
@@ -1384,11 +1417,10 @@ export default function CATToolPage() {
                     tmList.map((tmItem) => (
                       <div
                         key={tmItem.id}
-                        onClick={async () => {
+                        onClick={() => {
                           setSelectedTM(tmItem)
                           setTmEditMode(false) // Reset edit mode when switching TM
-                          const entries = await fetchTMEntries(tmItem.id)
-                          setTmEntries(entries)
+                          // tmEntries are automatically fetched via useTMEntries hook
                         }}
                         className={cn(
                           "p-3 rounded-lg cursor-pointer transition border",
@@ -1426,19 +1458,13 @@ export default function CATToolPage() {
                             {new Date(tmItem.created_at).toLocaleDateString()}
                           </span>
                           <button
-                            onClick={async (e) => {
+                            onClick={(e) => {
                               e.stopPropagation()
-                              if (confirm(`Delete "${tmItem.name}"?`)) {
-                                await deleteTM(tmItem.id)
-                                setTmList((prev) =>
-                                  prev.filter((t) => t.id !== tmItem.id)
-                                )
-                                if (selectedTM?.id === tmItem.id) {
-                                  setSelectedTM(null)
-                                  setTmEntries([])
-                                }
-                                toast.success("TM deleted")
-                              }
+                              setDeleteConfirm({
+                                type: 'tm',
+                                id: tmItem.id,
+                                name: tmItem.name,
+                              })
                             }}
                             className="text-red-400 hover:text-red-300 text-xs"
                           >
@@ -1616,27 +1642,13 @@ export default function CATToolPage() {
                                     source: newTmEntry.source,
                                     target: newTmEntry.target,
                                   }
-                                  const success = await addTMEntry(
-                                    selectedTM.id,
-                                    tmEntry,
-                                    selectedTM.target_langs[0] || targetLang
-                                  )
+                                  const success = await addTMEntryMutation.mutateAsync({
+                                    tmId: selectedTM.id,
+                                    entry: tmEntry,
+                                    targetLang: selectedTM.target_langs[0] || targetLang,
+                                  })
                                   if (success) {
-                                    const entries = await fetchTMEntries(
-                                      selectedTM.id
-                                    )
-                                    setTmEntries(entries)
                                     setTm((prev) => [...prev, tmEntry])
-                                    setTmList((prev) =>
-                                      prev.map((t) =>
-                                        t.id === selectedTM.id
-                                          ? {
-                                              ...t,
-                                              entry_count: entries.length,
-                                            }
-                                          : t
-                                      )
-                                    )
                                     toast.success("Entry added")
                                   }
                                   setNewTmEntry({ source: "", target: "" })
@@ -1665,45 +1677,22 @@ export default function CATToolPage() {
 
                                   const reader = new FileReader()
                                   reader.onload = async (event) => {
-                                    const content = event.target
-                                      ?.result as string
-                                    console.log(content)
+                                    const content = event.target?.result as string
                                     const imported = parseTmxFile(content)
-                                    console.log(imported)
 
                                     if (imported.length === 0) {
-                                      toast.error(
-                                        "No entries found in TMX file"
-                                      )
+                                      toast.error("No entries found in TMX file")
                                       return
                                     }
 
-                                    const savedCount = await importTMEntries(
-                                      selectedTM.id,
-                                      imported,
-                                      selectedTM.target_langs[0] || targetLang
-                                    )
+                                    const savedCount = await importTMEntriesMutation.mutateAsync({
+                                      tmId: selectedTM.id,
+                                      entries: imported,
+                                      targetLang: selectedTM.target_langs[0] || targetLang,
+                                    })
 
-                                    // Refresh entries
-                                    const entries = await fetchTMEntries(
-                                      selectedTM.id
-                                    )
-                                    setTmEntries(entries)
                                     setTm((prev) => [...prev, ...imported])
-                                    setTmList((prev) =>
-                                      prev.map((t) =>
-                                        t.id === selectedTM.id
-                                          ? {
-                                              ...t,
-                                              entry_count: entries.length,
-                                            }
-                                          : t
-                                      )
-                                    )
-
-                                    toast.success(
-                                      `${savedCount} entries imported from TMX`
-                                    )
+                                    toast.success(`${savedCount} entries imported from TMX`)
                                   }
                                   reader.readAsText(file)
                                   e.target.value = ""
@@ -1782,36 +1771,13 @@ export default function CATToolPage() {
                                     {tmEditMode && (
                                       <td className="px-4 py-3 text-right">
                                         <button
-                                          onClick={async () => {
-                                            if (confirm("Delete this entry?")) {
-                                              await deleteTMEntryById(
-                                                entry.id,
-                                                selectedTM.id
-                                              )
-                                              setTmEntries((prev) =>
-                                                prev.filter(
-                                                  (e) => e.id !== entry.id
-                                                )
-                                              )
-                                              setTm((prev) =>
-                                                prev.filter(
-                                                  (e) =>
-                                                    e.source !== entry.source
-                                                )
-                                              )
-                                              setTmList((prev) =>
-                                                prev.map((t) =>
-                                                  t.id === selectedTM.id
-                                                    ? {
-                                                        ...t,
-                                                        entry_count:
-                                                          t.entry_count - 1,
-                                                      }
-                                                    : t
-                                                )
-                                              )
-                                              toast.success("Entry deleted")
-                                            }
+                                          onClick={() => {
+                                            setDeleteConfirm({
+                                              type: 'tm-entry',
+                                              id: entry.id,
+                                              name: entry.source,
+                                              tmId: selectedTM.id,
+                                            })
                                           }}
                                           className="text-red-400 hover:text-red-300 text-sm"
                                         >
@@ -2515,17 +2481,15 @@ export default function CATToolPage() {
               <button
                 onClick={async () => {
                   if (newTMName.trim() && newTMTargetLangs.length > 0) {
-                    const newTM = await createTM(
-                      newTMName.trim(),
+                    const newTM = await createTMMutation.mutateAsync({
+                      name: newTMName.trim(),
                       sourceLang,
-                      newTMTargetLangs,
-                      selectedClient,
-                      newTMNote.trim() || undefined
-                    )
+                      targetLangs: newTMTargetLangs,
+                      clientId: selectedClient,
+                      note: newTMNote.trim() || undefined,
+                    })
                     if (newTM) {
-                      setTmList((prev) => [newTM, ...prev])
                       setSelectedTM(newTM)
-                      setTmEntries([])
                       toast.success(`TM "${newTMName}" created`)
                     } else {
                       toast.error("Failed to create TM")
@@ -2537,15 +2501,55 @@ export default function CATToolPage() {
                     setTargetLangDropdown(undefined)
                   }
                 }}
-                disabled={!newTMName.trim() || newTMTargetLangs.length === 0}
+                disabled={!newTMName.trim() || newTMTargetLangs.length === 0 || createTMMutation.isPending}
                 className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium"
               >
-                Create TM
+                {createTMMutation.isPending ? "Creating..." : "Create TM"}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteConfirm.type !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteConfirm({ type: null, id: null })
+          }
+        }}
+        title={
+          deleteConfirm.type === 'tm'
+            ? `Delete "${deleteConfirm.name}"?`
+            : "Delete this entry?"
+        }
+        description={
+          deleteConfirm.type === 'tm'
+            ? "This will permanently delete this TM and all its entries."
+            : `Are you sure you want to delete "${deleteConfirm.name}"?`
+        }
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="destructive"
+        onConfirm={async () => {
+          const { type, id, name, tmId } = deleteConfirm
+          if (type === 'tm' && id) {
+            await deleteTMMutation.mutateAsync(id)
+            if (selectedTM?.id === id) {
+              setSelectedTM(null)
+            }
+            toast.success("TM deleted")
+          } else if (type === 'tm-entry' && id && tmId) {
+            await deleteTMEntryMutation.mutateAsync({
+              entryId: id,
+              tmId: tmId,
+            })
+            setTm((prev) => prev.filter((e) => e.source !== name))
+            toast.success("Entry deleted")
+          }
+        }}
+      />
     </div>
   )
 }
