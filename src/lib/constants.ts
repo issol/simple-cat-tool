@@ -22,24 +22,43 @@ export const LANGUAGES: Language[] = [
 
 // Sample Translation Memory data
 export const SAMPLE_TM: TMEntry[] = [
-  // === 환영/인사 관련 ===
-  { source: "Welcome to CloudSync!", target: "CloudSync에 오신 것을 환영합니다!" },
+  // === 환영/인사 관련 (with context for 101% matching) ===
+  {
+    source: "Welcome to CloudSync!",
+    target: "CloudSync에 오신 것을 환영합니다!",
+    nextSource: "Your account has been created successfully.",
+  },
   { source: "Welcome to CloudSync Pro!", target: "CloudSync Pro에 오신 것을 환영합니다!" },
   { source: "Thank you for choosing CloudSync.", target: "CloudSync를 선택해 주셔서 감사합니다." },
   { source: "Thank you for choosing CloudSync Pro.", target: "CloudSync Pro를 선택해 주셔서 감사합니다." },
   { source: "Thank you for using our service.", target: "저희 서비스를 이용해 주셔서 감사합니다." },
 
-  // === 계정 관련 ===
-  { source: "Your account has been created successfully.", target: "계정이 성공적으로 생성되었습니다." },
+  // === 계정 관련 (with context for 101% matching) ===
+  {
+    source: "Your account has been created successfully.",
+    target: "계정이 성공적으로 생성되었습니다.",
+    prevSource: "Welcome to CloudSync!",
+    nextSource: "Please log in to continue.",
+  },
   { source: "Your account has been updated successfully.", target: "프로필이 성공적으로 업데이트되었습니다." },
   { source: "Your password has been changed successfully.", target: "비밀번호가 성공적으로 변경되었습니다." },
   { source: "Your settings have been saved successfully.", target: "설정이 성공적으로 저장되었습니다." },
   { source: "Create your account using your email address.", target: "이메일 주소를 사용하여 계정을 생성하세요." },
   { source: "Log in with your existing credentials.", target: "기존 자격 증명으로 로그인하세요." },
 
-  // === 로그인/인증 관련 ===
-  { source: "Please log in to continue.", target: "계속하려면 로그인해 주세요." },
-  { source: "Please log in to continue using our service.", target: "서비스를 계속 이용하시려면 로그인해 주세요." },
+  // === 로그인/인증 관련 (with context) ===
+  {
+    source: "Please log in to continue.",
+    target: "계속하려면 로그인해 주세요.",
+    prevSource: "Your account has been created successfully.",
+    nextSource: "Please log in to continue using our service.",
+  },
+  {
+    source: "Please log in to continue using our service.",
+    target: "서비스를 계속 이용하시려면 로그인해 주세요.",
+    prevSource: "Please log in to continue.",
+    nextSource: "Enter your email address and password.",
+  },
   { source: "Please sign in to access your account.", target: "계정에 접근하려면 로그인해 주세요." },
   { source: "Enter your email address and password.", target: "이메일 주소와 비밀번호를 입력하세요." },
   { source: "Forgot your password?", target: "비밀번호를 잊으셨나요?" },
@@ -113,11 +132,29 @@ export const SAMPLE_TM: TMEntry[] = [
   { source: "Two-factor authentication support.", target: "2단계 인증 지원." },
   { source: "Secure file sharing with password protection.", target: "비밀번호 보호로 안전한 파일 공유." },
 
-  // === 시작하기/단계 관련 ===
-  { source: "Getting Started", target: "시작하기" },
-  { source: "Step 1: Create your account", target: "1단계: 계정 생성" },
-  { source: "Step 2: Upload your files", target: "2단계: 파일 업로드" },
-  { source: "Step 3: Share with your team", target: "3단계: 팀과 공유" },
+  // === 시작하기/단계 관련 (with context) ===
+  {
+    source: "Getting Started",
+    target: "시작하기",
+    nextSource: "Step 1: Create your account",
+  },
+  {
+    source: "Step 1: Create your account",
+    target: "1단계: 계정 생성",
+    prevSource: "Getting Started",
+    nextSource: "Step 2: Upload your files",
+  },
+  {
+    source: "Step 2: Upload your files",
+    target: "2단계: 파일 업로드",
+    prevSource: "Step 1: Create your account",
+    nextSource: "Step 3: Share with your team",
+  },
+  {
+    source: "Step 3: Share with your team",
+    target: "3단계: 팀과 공유",
+    prevSource: "Step 2: Upload your files",
+  },
   { source: "Go to Settings and click on Check for Updates.", target: "설정으로 이동하여 업데이트 확인을 클릭하세요." },
   { source: "Download and install the latest version.", target: "최신 버전을 다운로드하고 설치하세요." },
   { source: "Restart the application to complete the update.", target: "업데이트를 완료하려면 애플리케이션을 다시 시작하세요." },
