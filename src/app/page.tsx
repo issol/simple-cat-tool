@@ -1314,36 +1314,98 @@ export default function CATToolPage() {
                 </div>
               </div>
 
-              {/* TM Entries Panel */}
-              <div className="flex-1 flex flex-col min-w-0">
+              {/* TM Detail Panel */}
+              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 {!selectedTM ? (
                   <div className="flex-1 flex items-center justify-center text-slate-500">
                     <div className="text-center">
                       <div className="text-6xl mb-4">👈</div>
-                      <p className="text-lg">Select a TM to view entries</p>
+                      <p className="text-lg">Select a TM to view details</p>
                     </div>
                   </div>
                 ) : (
-                  <>
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h2 className="text-xl font-bold text-teal-400">{selectedTM.name}</h2>
-                        <p className="text-sm text-slate-400">
-                          {selectedTM.source_lang.toUpperCase()} → {selectedTM.target_langs.map(l => l.toUpperCase()).join(", ")}
-                          {selectedTM.note && ` • ${selectedTM.note}`}
-                        </p>
+                  <div className="flex-1 overflow-auto">
+                    {/* Basic Info Section */}
+                    <div className="bg-slate-800 rounded-xl p-6 mb-4">
+                      <div className="flex items-start justify-between mb-4">
+                        <div>
+                          <h2 className="text-2xl font-bold text-teal-400">{selectedTM.name}</h2>
+                          {selectedTM.note && (
+                            <p className="text-slate-400 mt-1">{selectedTM.note}</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              // TODO: Edit TM modal
+                              toast.info("Edit feature coming soon")
+                            }}
+                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm"
+                          >
+                            Edit
+                          </button>
+                        </div>
                       </div>
-                      <input
-                        type="text"
-                        placeholder="Search entries..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="bg-slate-700 rounded-lg px-4 py-2 text-sm w-64"
-                      />
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <p className="text-xs text-slate-500 mb-1">Source Language</p>
+                          <p className="font-medium text-teal-300">
+                            {getLanguageByCode(selectedTM.source_lang)?.name || selectedTM.source_lang.toUpperCase()}
+                          </p>
+                        </div>
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <p className="text-xs text-slate-500 mb-1">Target Languages</p>
+                          <div className="flex flex-wrap gap-1">
+                            {selectedTM.target_langs.map((lang) => (
+                              <span key={lang} className="text-sm font-medium text-teal-300">
+                                {getLanguageByCode(lang)?.name || lang.toUpperCase()}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <p className="text-xs text-slate-500 mb-1">Entries</p>
+                          <p className="font-medium text-2xl text-white">{selectedTM.entry_count}</p>
+                        </div>
+                        <div className="bg-slate-700/50 rounded-lg p-3">
+                          <p className="text-xs text-slate-500 mb-1">Created</p>
+                          <p className="font-medium text-slate-300">
+                            {new Date(selectedTM.created_at).toLocaleDateString()}
+                          </p>
+                          {selectedTM.updated_at !== selectedTM.created_at && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              Updated: {new Date(selectedTM.updated_at).toLocaleDateString()}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {selectedTM.client_id && (
+                        <div className="mt-4 pt-4 border-t border-slate-700">
+                          <p className="text-xs text-slate-500 mb-1">Associated Client</p>
+                          <p className="font-medium text-slate-300">
+                            {clients.find(c => c.id === selectedTM.client_id)?.name || "Unknown Client"}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Add Entry Form */}
-                    <div className="flex gap-2 bg-slate-800 p-4 rounded-xl mb-4">
+                    {/* TM Entries Section */}
+                    <div className="bg-slate-800 rounded-xl p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-semibold text-white">TM Entries</h3>
+                        <input
+                          type="text"
+                          placeholder="Search entries..."
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          className="bg-slate-700 rounded-lg px-4 py-2 text-sm w-64"
+                        />
+                      </div>
+
+                      {/* Add Entry Form */}
+                      <div className="flex gap-2 bg-slate-700/50 p-4 rounded-xl mb-4">
                       <input
                         type="text"
                         placeholder={`Source (${selectedTM.source_lang})`}
@@ -1471,7 +1533,8 @@ export default function CATToolPage() {
                         </table>
                       </div>
                     )}
-                  </>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
