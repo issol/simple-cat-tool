@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import Image from "next/image"
 import { useAuth } from "@/components/auth/AuthProvider"
 import { fetchUserTM, addTMEntry, deleteTMEntry as deleteDBTMEntry } from "@/lib/supabase/tm-service"
+import { fetchUserTermbase, addTermbaseEntry, deleteTermbaseEntry as deleteDBTermbaseEntry } from "@/lib/supabase/termbase-service"
 import type {
   Segment,
   TMEntry,
@@ -85,7 +86,32 @@ export default function CATToolPage() {
     }
     loadUserTM()
   }, [user, isConfigured])
+
   const [termbase, setTermbase] = useState<TermbaseEntry[]>(SAMPLE_TERMBASE)
+
+  // Fetch user's Termbase from Supabase when logged in
+  useEffect(() => {
+    async function loadUserTermbase() {
+      if (user && isConfigured) {
+        try {
+          const userTermbase = await fetchUserTermbase()
+          if (userTermbase.length > 0) {
+            // Merge user Termbase with sample (user takes priority)
+            const mergedTermbase = [...userTermbase]
+            SAMPLE_TERMBASE.forEach((sample) => {
+              if (!mergedTermbase.find((t) => t.source === sample.source)) {
+                mergedTermbase.push(sample)
+              }
+            })
+            setTermbase(mergedTermbase)
+          }
+        } catch (error) {
+          console.error("Failed to load Termbase:", error)
+        }
+      }
+    }
+    loadUserTermbase()
+  }, [user, isConfigured])
   const [activeSegment, setActiveSegment] = useState<number>(0)
   const [view, setView] = useState<ViewType>("editor")
   const [fileName, setFileName] = useState<string>("")
@@ -1235,6 +1261,10 @@ export default function CATToolPage() {
                   onClick={() => {
                     if (newTerm.source && newTerm.target) {
                       setTermbase((prev) => [...prev, newTerm])
+                      // Save to Supabase if user is logged in
+                      if (user && isConfigured) {
+                        addTermbaseEntry(newTerm)
+                      }
                       setNewTerm({ source: "", target: "", note: "" })
                     }
                   }}
@@ -1278,11 +1308,16 @@ export default function CATToolPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
-                            onClick={() =>
+                            onClick={() => {
+                              const entryToDelete = termbase[idx]
                               setTermbase((prev) =>
                                 prev.filter((_, i) => i !== idx)
                               )
-                            }
+                              // Delete from Supabase if user is logged in
+                              if (user && isConfigured && entryToDelete) {
+                                deleteDBTermbaseEntry(entryToDelete.source)
+                              }
+                            }}
                             className="text-red-400 hover:text-red-300"
                           >
                             🗑️
