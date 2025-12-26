@@ -1,4 +1,4 @@
-import type { Language, TMEntry, TermbaseEntry, MatchTier } from '@/types';
+import type { TMEntry, TermbaseEntry, MatchTier } from '@/types';
 
 // Match tiers for analysis
 export const MATCH_TIERS: MatchTier[] = [
@@ -8,16 +8,6 @@ export const MATCH_TIERS: MatchTier[] = [
   { name: '85-94%', label: 'Medium Fuzzy', min: 85, max: 94, rate: 50, color: 'bg-yellow-500' },
   { name: '75-84%', label: 'Low Fuzzy', min: 75, max: 84, rate: 75, color: 'bg-orange-500' },
   { name: 'New', label: 'No Match', min: 0, max: 74, rate: 100, color: 'bg-red-500' },
-];
-
-export const LANGUAGES: Language[] = [
-  { code: 'EN', name: 'English', flag: '🇺🇸' },
-  { code: 'KO', name: 'Korean', flag: '🇰🇷' },
-  { code: 'JA', name: 'Japanese', flag: '🇯🇵' },
-  { code: 'ZH', name: 'Chinese', flag: '🇨🇳' },
-  { code: 'ES', name: 'Spanish', flag: '🇪🇸' },
-  { code: 'FR', name: 'French', flag: '🇫🇷' },
-  { code: 'DE', name: 'German', flag: '🇩🇪' },
 ];
 
 // Sample Translation Memory data

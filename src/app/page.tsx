@@ -4,8 +4,22 @@ import { useState, useCallback, useMemo, useEffect } from "react"
 import { toast } from "sonner"
 import Image from "next/image"
 import { useAuth } from "@/components/auth/AuthProvider"
-import { fetchUserTM, addTMEntry, deleteTMEntry as deleteDBTMEntry } from "@/lib/supabase/tm-service"
-import { fetchUserTermbase, addTermbaseEntry, deleteTermbaseEntry as deleteDBTermbaseEntry } from "@/lib/supabase/termbase-service"
+import {
+  fetchUserTMs,
+  fetchUserTM,
+  fetchTMEntries,
+  fetchAllTMEntriesForMatching,
+  createTM,
+  deleteTM,
+  addTMEntry,
+  deleteTMEntryById,
+  importTMEntries,
+  type TranslationMemory,
+  type DBTMEntry,
+} from "@/lib/supabase/tm-service"
+import { fetchUserTermbase, fetchUserTermbaseWithDetails, addTermbaseEntry, deleteTermbaseEntryById } from "@/lib/supabase/termbase-service"
+import { fetchUserClients, createClientEntry, type Client } from "@/lib/supabase/client-service"
+import type { DBTermbaseEntry } from "@/lib/supabase/termbase-service"
 import type {
   Segment,
   TMEntry,
@@ -21,12 +35,17 @@ import type {
   QACheck,
   QAIssueType,
 } from "@/types"
+import { MATCH_TIERS } from "@/lib/constants"
+import { ISO_639_1_LANGUAGES, COMMON_LANGUAGES, getLanguageByCode } from "@/lib/languages"
 import {
-  LANGUAGES,
-  SAMPLE_TM,
-  SAMPLE_TERMBASE,
-  MATCH_TIERS,
-} from "@/lib/constants"
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { calculateMatchRate, cn, countWords } from "@/lib/utils"
 import {
   calculateContextMatchRate,
@@ -58,65 +77,80 @@ export default function CATToolPage() {
 
   // State
   const [segments, setSegments] = useState<Segment[]>([])
-  const [tm, setTm] = useState<TMEntry[]>(SAMPLE_TM)
-  const [tmLoading, setTmLoading] = useState(false)
 
-  // Fetch user's TM from Supabase when logged in
+  // TM State (container structure)
+  const [tmList, setTmList] = useState<TranslationMemory[]>([])
+  const [selectedTM, setSelectedTM] = useState<TranslationMemory | null>(null)
+  const [tmEntries, setTmEntries] = useState<DBTMEntry[]>([])
+  const [tm, setTm] = useState<TMEntry[]>([]) // For matching (all entries from selected TMs)
+  const [showTMModal, setShowTMModal] = useState(false)
+  const [newTMName, setNewTMName] = useState("")
+  const [newTMNote, setNewTMNote] = useState("")
+  const [newTMTargetLangs, setNewTMTargetLangs] = useState<string[]>([])
+
+  // Termbase State
+  const [termbase, setTermbase] = useState<TermbaseEntry[]>([])
+  const [termbaseDB, setTermbaseDB] = useState<DBTermbaseEntry[]>([])
+
+  // Client State
+  const [clients, setClients] = useState<Client[]>([])
+  const [selectedClient, setSelectedClient] = useState<string | null>(null)
+  const [dataLoading, setDataLoading] = useState(false)
+  const [showClientModal, setShowClientModal] = useState(false)
+  const [newClientName, setNewClientName] = useState("")
+  const [newClientDesc, setNewClientDesc] = useState("")
+
+  // Fetch clients, TM, and Termbase from Supabase when logged in
   useEffect(() => {
-    async function loadUserTM() {
+    async function loadData() {
       if (user && isConfigured) {
-        setTmLoading(true)
+        setDataLoading(true)
         try {
-          const userTM = await fetchUserTM()
-          if (userTM.length > 0) {
-            // Merge user TM with sample TM (user TM takes priority)
-            const mergedTM = [...userTM]
-            SAMPLE_TM.forEach((sample) => {
-              if (!mergedTM.find((t) => t.source === sample.source)) {
-                mergedTM.push(sample)
-              }
-            })
-            setTm(mergedTM)
+          // Fetch clients
+          const userClients = await fetchUserClients()
+          setClients(userClients)
+
+          // Fetch TM list (filtered by selected client)
+          const userTMs = await fetchUserTMs(selectedClient)
+          setTmList(userTMs)
+
+          // Fetch all TM entries for matching
+          if (userTMs.length > 0) {
+            const allEntries = await fetchAllTMEntriesForMatching(userTMs.map(t => t.id))
+            setTm(allEntries)
+          } else {
+            setTm([])
           }
+
+          // Fetch Termbase (filtered by selected client)
+          const userTermbase = await fetchUserTermbase(selectedClient)
+          setTermbase(userTermbase)
+
+          // Fetch Termbase with details for deletion by ID
+          const userTermbaseDB = await fetchUserTermbaseWithDetails(selectedClient)
+          setTermbaseDB(userTermbaseDB)
         } catch (error) {
-          console.error("Failed to load TM:", error)
+          console.error("Failed to load data:", error)
         }
-        setTmLoading(false)
+        setDataLoading(false)
+      } else {
+        // Clear data when logged out
+        setTmList([])
+        setSelectedTM(null)
+        setTmEntries([])
+        setTm([])
+        setTermbase([])
+        setTermbaseDB([])
+        setClients([])
       }
     }
-    loadUserTM()
-  }, [user, isConfigured])
-
-  const [termbase, setTermbase] = useState<TermbaseEntry[]>(SAMPLE_TERMBASE)
-
-  // Fetch user's Termbase from Supabase when logged in
-  useEffect(() => {
-    async function loadUserTermbase() {
-      if (user && isConfigured) {
-        try {
-          const userTermbase = await fetchUserTermbase()
-          if (userTermbase.length > 0) {
-            // Merge user Termbase with sample (user takes priority)
-            const mergedTermbase = [...userTermbase]
-            SAMPLE_TERMBASE.forEach((sample) => {
-              if (!mergedTermbase.find((t) => t.source === sample.source)) {
-                mergedTermbase.push(sample)
-              }
-            })
-            setTermbase(mergedTermbase)
-          }
-        } catch (error) {
-          console.error("Failed to load Termbase:", error)
-        }
-      }
-    }
-    loadUserTermbase()
-  }, [user, isConfigured])
+    loadData()
+  }, [user, isConfigured, selectedClient])
   const [activeSegment, setActiveSegment] = useState<number>(0)
   const [view, setView] = useState<ViewType>("editor")
   const [fileName, setFileName] = useState<string>("")
-  const [sourceLang, setSourceLang] = useState<LanguageCode>("EN")
-  const [targetLang, setTargetLang] = useState<LanguageCode>("KO")
+  const [sourceLang, setSourceLang] = useState<LanguageCode>("en")
+  const [targetLang, setTargetLang] = useState<LanguageCode>("ko")
   const [delimiter, setDelimiter] = useState<DelimiterType>("sentence")
   const [loading, setLoading] = useState<boolean>(false)
   const [searchTerm, setSearchTerm] = useState<string>("")
@@ -124,6 +158,10 @@ export default function CATToolPage() {
     source: "",
     target: "",
     note: "",
+  })
+  const [newTmEntry, setNewTmEntry] = useState<{ source: string; target: string }>({
+    source: "",
+    target: "",
   })
   const [wordRate, setWordRate] = useState<number>(500)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
@@ -319,9 +357,9 @@ export default function CATToolPage() {
         const tmEntryWithContext = createTMEntryWithContext(segIndex, segments)
         setTm((prev) => [...prev, tmEntryWithContext])
 
-        // Save to Supabase if user is logged in
-        if (user && isConfigured) {
-          addTMEntry(tmEntryWithContext, sourceLang, targetLang)
+        // Save to Supabase if user is logged in and a TM is selected
+        if (user && isConfigured && selectedTM) {
+          addTMEntry(selectedTM.id, tmEntryWithContext, targetLang)
         }
       }
 
@@ -398,13 +436,9 @@ export default function CATToolPage() {
       const imported = parseTmxFile(content)
       setTm((prev) => [...prev, ...imported])
 
-      // Save imported entries to Supabase if user is logged in
-      if (user && isConfigured && imported.length > 0) {
-        let savedCount = 0
-        for (const entry of imported) {
-          const success = await addTMEntry(entry, sourceLang, targetLang)
-          if (success) savedCount++
-        }
+      // Save imported entries to Supabase if user is logged in and TM is selected
+      if (user && isConfigured && selectedTM && imported.length > 0) {
+        const savedCount = await importTMEntries(selectedTM.id, imported, targetLang)
         toast.success(`${savedCount}개 TM 항목이 저장되었습니다`)
       }
     }
@@ -562,33 +596,61 @@ export default function CATToolPage() {
               <label className="block text-xs text-slate-400 mb-1">
                 Source
               </label>
-              <select
-                value={sourceLang}
-                onChange={(e) => setSourceLang(e.target.value as LanguageCode)}
-                className="w-full bg-slate-700 rounded px-2 py-2 text-sm"
-              >
-                {LANGUAGES.map((lang) => (
-                  <option key={lang.code} value={lang.code}>
-                    {lang.flag} {lang.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={sourceLang} onValueChange={(value) => setSourceLang(value)}>
+                <SelectTrigger className="w-full bg-slate-700 border-slate-600 text-sm h-9">
+                  <SelectValue>
+                    {getLanguageByCode(sourceLang)?.name || sourceLang.toUpperCase()}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 max-h-[300px]">
+                  <SelectGroup>
+                    <SelectLabel className="text-slate-400">Common</SelectLabel>
+                    {COMMON_LANGUAGES.map((lang) => (
+                      <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700 focus:text-white">
+                        {lang.name} <span className="text-slate-400 ml-1">({lang.code})</span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="text-slate-400">All Languages</SelectLabel>
+                    {ISO_639_1_LANGUAGES.filter(l => !COMMON_LANGUAGES.find(c => c.code === l.code)).map((lang) => (
+                      <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700 focus:text-white">
+                        {lang.name} <span className="text-slate-400 ml-1">({lang.code})</span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
             <div>
               <label className="block text-xs text-slate-400 mb-1">
                 Target
               </label>
-              <select
-                value={targetLang}
-                onChange={(e) => setTargetLang(e.target.value as LanguageCode)}
-                className="w-full bg-slate-700 rounded px-2 py-2 text-sm"
-              >
-                {LANGUAGES.map((lang) => (
-                  <option key={lang.code} value={lang.code}>
-                    {lang.flag} {lang.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={targetLang} onValueChange={(value) => setTargetLang(value)}>
+                <SelectTrigger className="w-full bg-slate-700 border-slate-600 text-sm h-9">
+                  <SelectValue>
+                    {getLanguageByCode(targetLang)?.name || targetLang.toUpperCase()}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700 max-h-[300px]">
+                  <SelectGroup>
+                    <SelectLabel className="text-slate-400">Common</SelectLabel>
+                    {COMMON_LANGUAGES.map((lang) => (
+                      <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700 focus:text-white">
+                        {lang.name} <span className="text-slate-400 ml-1">({lang.code})</span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  <SelectGroup>
+                    <SelectLabel className="text-slate-400">All Languages</SelectLabel>
+                    {ISO_639_1_LANGUAGES.filter(l => !COMMON_LANGUAGES.find(c => c.code === l.code)).map((lang) => (
+                      <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700 focus:text-white">
+                        {lang.name} <span className="text-slate-400 ml-1">({lang.code})</span>
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -607,6 +669,39 @@ export default function CATToolPage() {
               <option value="paragraph">Paragraph</option>
             </select>
           </div>
+
+          {/* Client Selector */}
+          {user && isConfigured && (
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-1">
+                Client
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={selectedClient || ""}
+                  onChange={(e) => setSelectedClient(e.target.value || null)}
+                  className="flex-1 bg-slate-700 rounded px-3 py-2 text-sm"
+                >
+                  <option value="">All Clients</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setShowClientModal(true)}
+                  className="px-3 py-2 bg-teal-600 hover:bg-teal-500 rounded text-sm"
+                  title="Add new client"
+                >
+                  +
+                </button>
+              </div>
+              {dataLoading && (
+                <p className="text-xs text-slate-500 mt-1">Loading...</p>
+              )}
+            </div>
+          )}
 
           {/* Word Rate */}
           <div>
@@ -1136,82 +1231,248 @@ export default function CATToolPage() {
           )}
 
           {!loading && view === "tm" && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-teal-400">
-                  Translation Memory
-                </h2>
-                <input
-                  type="text"
-                  placeholder="Search..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="bg-slate-700 rounded-lg px-4 py-2 text-sm w-64"
-                />
+            <div className="flex gap-6 h-full">
+              {/* TM List Panel */}
+              <div className="w-80 flex-shrink-0 flex flex-col">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-xl font-bold text-teal-400">TM List</h2>
+                  <button
+                    onClick={() => {
+                      setNewTMTargetLangs([targetLang])
+                      setShowTMModal(true)
+                    }}
+                    className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 rounded text-sm"
+                  >
+                    + New TM
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-auto space-y-2">
+                  {tmList.length === 0 ? (
+                    <div className="text-slate-500 text-center py-8">
+                      <div className="text-4xl mb-2">📚</div>
+                      <p className="text-sm">No TMs yet</p>
+                      <p className="text-xs mt-1">Create your first TM</p>
+                    </div>
+                  ) : (
+                    tmList.map((tmItem) => (
+                      <div
+                        key={tmItem.id}
+                        onClick={async () => {
+                          setSelectedTM(tmItem)
+                          const entries = await fetchTMEntries(tmItem.id)
+                          setTmEntries(entries)
+                        }}
+                        className={cn(
+                          "p-3 rounded-lg cursor-pointer transition border",
+                          selectedTM?.id === tmItem.id
+                            ? "bg-teal-600/20 border-teal-500"
+                            : "bg-slate-800 border-slate-700 hover:border-slate-600"
+                        )}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium truncate">{tmItem.name}</h3>
+                            <p className="text-xs text-slate-400 mt-1">
+                              {tmItem.source_lang.toUpperCase()} → {tmItem.target_langs.map(l => l.toUpperCase()).join(", ")}
+                            </p>
+                            {tmItem.note && (
+                              <p className="text-xs text-slate-500 mt-1 truncate">{tmItem.note}</p>
+                            )}
+                          </div>
+                          <div className="text-right ml-2">
+                            <span className="text-sm font-medium text-teal-400">{tmItem.entry_count}</span>
+                            <p className="text-xs text-slate-500">entries</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-700">
+                          <span className="text-xs text-slate-500">
+                            {new Date(tmItem.created_at).toLocaleDateString()}
+                          </span>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation()
+                              if (confirm(`Delete "${tmItem.name}"?`)) {
+                                await deleteTM(tmItem.id)
+                                setTmList((prev) => prev.filter((t) => t.id !== tmItem.id))
+                                if (selectedTM?.id === tmItem.id) {
+                                  setSelectedTM(null)
+                                  setTmEntries([])
+                                }
+                                toast.success("TM deleted")
+                              }
+                            }}
+                            className="text-red-400 hover:text-red-300 text-xs"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
 
-              {filteredTm.length === 0 ? (
-                <div className="text-slate-500 text-center py-12">
-                  <div className="text-6xl mb-4">📚</div>
-                  <p className="text-lg">
-                    {searchTerm ? "No results found" : "TM is empty"}
-                  </p>
-                </div>
-              ) : (
-                <div className="bg-slate-800 rounded-xl overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-slate-700">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm text-slate-300 w-12">
-                          #
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm text-slate-300">
-                          Source ({sourceLang})
-                        </th>
-                        <th className="px-4 py-3 text-left text-sm text-slate-300">
-                          Target ({targetLang})
-                        </th>
-                        <th className="px-4 py-3 text-right text-sm text-slate-300 w-20">
-                          Delete
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredTm.map((entry, idx) => (
-                        <tr
-                          key={idx}
-                          className="border-t border-slate-700 hover:bg-slate-700/50"
-                        >
-                          <td className="px-4 py-3 text-slate-500 text-sm">
-                            {idx + 1}
-                          </td>
-                          <td className="px-4 py-3 text-sm">{entry.source}</td>
-                          <td className="px-4 py-3 text-sm text-slate-300">
-                            {entry.target}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() => {
-                                const entryToDelete = tm[idx]
-                                setTm((prev) =>
-                                  prev.filter((_, i) => i !== idx)
+              {/* TM Entries Panel */}
+              <div className="flex-1 flex flex-col min-w-0">
+                {!selectedTM ? (
+                  <div className="flex-1 flex items-center justify-center text-slate-500">
+                    <div className="text-center">
+                      <div className="text-6xl mb-4">👈</div>
+                      <p className="text-lg">Select a TM to view entries</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="text-xl font-bold text-teal-400">{selectedTM.name}</h2>
+                        <p className="text-sm text-slate-400">
+                          {selectedTM.source_lang.toUpperCase()} → {selectedTM.target_langs.map(l => l.toUpperCase()).join(", ")}
+                          {selectedTM.note && ` • ${selectedTM.note}`}
+                        </p>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Search entries..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="bg-slate-700 rounded-lg px-4 py-2 text-sm w-64"
+                      />
+                    </div>
+
+                    {/* Add Entry Form */}
+                    <div className="flex gap-2 bg-slate-800 p-4 rounded-xl mb-4">
+                      <input
+                        type="text"
+                        placeholder={`Source (${selectedTM.source_lang})`}
+                        value={newTmEntry.source}
+                        onChange={(e) =>
+                          setNewTmEntry((prev) => ({ ...prev, source: e.target.value }))
+                        }
+                        className="flex-1 bg-slate-700 rounded-lg px-4 py-2 text-sm"
+                      />
+                      <input
+                        type="text"
+                        placeholder={`Target (${selectedTM.target_langs[0] || targetLang})`}
+                        value={newTmEntry.target}
+                        onChange={(e) =>
+                          setNewTmEntry((prev) => ({ ...prev, target: e.target.value }))
+                        }
+                        className="flex-1 bg-slate-700 rounded-lg px-4 py-2 text-sm"
+                      />
+                      <button
+                        onClick={async () => {
+                          if (newTmEntry.source && newTmEntry.target && selectedTM) {
+                            const tmEntry: TMEntry = {
+                              source: newTmEntry.source,
+                              target: newTmEntry.target,
+                            }
+                            const success = await addTMEntry(
+                              selectedTM.id,
+                              tmEntry,
+                              selectedTM.target_langs[0] || targetLang
+                            )
+                            if (success) {
+                              const entries = await fetchTMEntries(selectedTM.id)
+                              setTmEntries(entries)
+                              setTm((prev) => [...prev, tmEntry])
+                              // Update entry count in list
+                              setTmList((prev) =>
+                                prev.map((t) =>
+                                  t.id === selectedTM.id
+                                    ? { ...t, entry_count: entries.length }
+                                    : t
                                 )
-                                // Delete from Supabase if user is logged in
-                                if (user && isConfigured && entryToDelete) {
-                                  deleteDBTMEntry(entryToDelete.source)
-                                }
-                              }}
-                              className="text-red-400 hover:text-red-300 text-sm"
-                            >
-                              🗑️
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                              )
+                              toast.success("Entry added")
+                            }
+                            setNewTmEntry({ source: "", target: "" })
+                          }
+                        }}
+                        className="px-6 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-sm font-medium"
+                      >
+                        + Add
+                      </button>
+                    </div>
+
+                    {/* Entries Table */}
+                    {tmEntries.filter(
+                      (e) =>
+                        e.source.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        e.target.toLowerCase().includes(searchTerm.toLowerCase())
+                    ).length === 0 ? (
+                      <div className="text-slate-500 text-center py-12">
+                        <div className="text-6xl mb-4">📝</div>
+                        <p className="text-lg">
+                          {searchTerm ? "No entries found" : "No entries yet"}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="flex-1 overflow-auto bg-slate-800 rounded-xl">
+                        <table className="w-full">
+                          <thead className="bg-slate-700 sticky top-0">
+                            <tr>
+                              <th className="px-4 py-3 text-left text-sm text-slate-300 w-12">#</th>
+                              <th className="px-4 py-3 text-left text-sm text-slate-300">
+                                Source ({selectedTM.source_lang})
+                              </th>
+                              <th className="px-4 py-3 text-left text-sm text-slate-300">
+                                Target ({selectedTM.target_langs.join(", ")})
+                              </th>
+                              <th className="px-4 py-3 text-right text-sm text-slate-300 w-20">
+                                Delete
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tmEntries
+                              .filter(
+                                (e) =>
+                                  e.source.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                  e.target.toLowerCase().includes(searchTerm.toLowerCase())
+                              )
+                              .map((entry, idx) => (
+                                <tr
+                                  key={entry.id}
+                                  className="border-t border-slate-700 hover:bg-slate-700/50"
+                                >
+                                  <td className="px-4 py-3 text-slate-500 text-sm">{idx + 1}</td>
+                                  <td className="px-4 py-3 text-sm">{entry.source}</td>
+                                  <td className="px-4 py-3 text-sm text-slate-300">{entry.target}</td>
+                                  <td className="px-4 py-3 text-right">
+                                    <button
+                                      onClick={async () => {
+                                        await deleteTMEntryById(entry.id, selectedTM.id)
+                                        setTmEntries((prev) =>
+                                          prev.filter((e) => e.id !== entry.id)
+                                        )
+                                        setTm((prev) =>
+                                          prev.filter((e) => e.source !== entry.source)
+                                        )
+                                        setTmList((prev) =>
+                                          prev.map((t) =>
+                                            t.id === selectedTM.id
+                                              ? { ...t, entry_count: t.entry_count - 1 }
+                                              : t
+                                          )
+                                        )
+                                        toast.success("Entry deleted")
+                                      }}
+                                      className="text-red-400 hover:text-red-300 text-sm"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -1258,12 +1519,18 @@ export default function CATToolPage() {
                   className="w-40 bg-slate-700 rounded-lg px-4 py-2 text-sm"
                 />
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (newTerm.source && newTerm.target) {
                       setTermbase((prev) => [...prev, newTerm])
                       // Save to Supabase if user is logged in
                       if (user && isConfigured) {
-                        addTermbaseEntry(newTerm)
+                        const success = await addTermbaseEntry(newTerm, selectedClient)
+                        if (success) {
+                          // Refresh termbaseDB to get the new entry with ID
+                          const userTermbaseDB = await fetchUserTermbaseWithDetails(selectedClient)
+                          setTermbaseDB(userTermbaseDB)
+                          toast.success("Term added")
+                        }
                       }
                       setNewTerm({ source: "", target: "", note: "" })
                     }
@@ -1308,14 +1575,21 @@ export default function CATToolPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <button
-                            onClick={() => {
-                              const entryToDelete = termbase[idx]
+                            onClick={async () => {
+                              // Find the DB entry with ID
+                              const dbEntry = termbaseDB.find((e) => e.source === term.source)
                               setTermbase((prev) =>
                                 prev.filter((_, i) => i !== idx)
                               )
+                              setTermbaseDB((prev) =>
+                                prev.filter((e) => e.source !== term.source)
+                              )
                               // Delete from Supabase if user is logged in
-                              if (user && isConfigured && entryToDelete) {
-                                deleteDBTermbaseEntry(entryToDelete.source)
+                              if (user && isConfigured && dbEntry) {
+                                const success = await deleteTermbaseEntryById(dbEntry.id)
+                                if (success) {
+                                  toast.success("Term deleted")
+                                }
                               }
                             }}
                             className="text-red-400 hover:text-red-300"
@@ -1542,6 +1816,262 @@ export default function CATToolPage() {
           )}
         </main>
       </div>
+
+      {/* Client Creation Modal */}
+      {showClientModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl p-6 w-96 border border-slate-700">
+            <h3 className="text-lg font-bold text-teal-400 mb-4">Create New Client</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-slate-300 mb-1">Client Name *</label>
+                <input
+                  type="text"
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  placeholder="e.g., Samsung Electronics"
+                  className="w-full bg-slate-700 rounded px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-300 mb-1">Description</label>
+                <input
+                  type="text"
+                  value={newClientDesc}
+                  onChange={(e) => setNewClientDesc(e.target.value)}
+                  placeholder="Optional description"
+                  className="w-full bg-slate-700 rounded px-3 py-2 text-sm"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-sm text-slate-400">
+                <div>Source: {sourceLang}</div>
+                <div>Target: {targetLang}</div>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowClientModal(false)
+                  setNewClientName("")
+                  setNewClientDesc("")
+                }}
+                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (newClientName.trim()) {
+                    const newClient = await createClientEntry(
+                      newClientName.trim(),
+                      sourceLang,
+                      targetLang,
+                      newClientDesc.trim() || undefined
+                    )
+                    if (newClient) {
+                      setClients((prev) => [newClient, ...prev])
+                      setSelectedClient(newClient.id)
+                      toast.success(`Client "${newClientName}" created`)
+                    } else {
+                      toast.error("Failed to create client")
+                    }
+                    setShowClientModal(false)
+                    setNewClientName("")
+                    setNewClientDesc("")
+                  }
+                }}
+                disabled={!newClientName.trim()}
+                className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium"
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TM Creation Modal */}
+      {showTMModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-slate-800 rounded-xl p-6 w-[500px] max-h-[90vh] overflow-y-auto border border-slate-700">
+            <h3 className="text-lg font-bold text-teal-400 mb-4">Create New Translation Memory</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-slate-300 mb-1">TM Name *</label>
+                <input
+                  type="text"
+                  value={newTMName}
+                  onChange={(e) => setNewTMName(e.target.value)}
+                  placeholder="e.g., Marketing Materials TM"
+                  className="w-full bg-slate-700 rounded px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-300 mb-1">Source Language *</label>
+                <Select value={sourceLang} onValueChange={setSourceLang}>
+                  <SelectTrigger className="w-full bg-slate-700 border-slate-600">
+                    <SelectValue placeholder="Select source language" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700 max-h-[300px]">
+                    <SelectGroup>
+                      <SelectLabel className="text-slate-400">Common Languages</SelectLabel>
+                      {COMMON_LANGUAGES.map((lang) => (
+                        <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700">
+                          {lang.name} ({lang.nativeName})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                    <SelectGroup>
+                      <SelectLabel className="text-slate-400">All Languages</SelectLabel>
+                      {ISO_639_1_LANGUAGES.filter(
+                        (lang) => !COMMON_LANGUAGES.some((c) => c.code === lang.code)
+                      ).map((lang) => (
+                        <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700">
+                          {lang.name} ({lang.nativeName})
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-300 mb-1">Target Languages *</label>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-2">
+                    {newTMTargetLangs.map((langCode) => {
+                      const lang = getLanguageByCode(langCode)
+                      return (
+                        <span
+                          key={langCode}
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-teal-600/30 text-teal-300 rounded text-sm"
+                        >
+                          {lang?.name || langCode}
+                          <button
+                            onClick={() => setNewTMTargetLangs((prev) => prev.filter((l) => l !== langCode))}
+                            className="hover:text-red-400"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                  <Select
+                    value=""
+                    onValueChange={(value) => {
+                      if (value && !newTMTargetLangs.includes(value)) {
+                        setNewTMTargetLangs((prev) => [...prev, value])
+                      }
+                    }}
+                  >
+                    <SelectTrigger className="w-full bg-slate-700 border-slate-600">
+                      <SelectValue placeholder="Add target language..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700 max-h-[300px]">
+                      <SelectGroup>
+                        <SelectLabel className="text-slate-400">Common Languages</SelectLabel>
+                        {COMMON_LANGUAGES.filter((lang) => !newTMTargetLangs.includes(lang.code)).map((lang) => (
+                          <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700">
+                            {lang.name} ({lang.nativeName})
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                      <SelectGroup>
+                        <SelectLabel className="text-slate-400">All Languages</SelectLabel>
+                        {ISO_639_1_LANGUAGES.filter(
+                          (lang) => !COMMON_LANGUAGES.some((c) => c.code === lang.code) && !newTMTargetLangs.includes(lang.code)
+                        ).map((lang) => (
+                          <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700">
+                            {lang.name} ({lang.nativeName})
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-300 mb-1">Client (Optional)</label>
+                <Select
+                  value={selectedClient || ""}
+                  onValueChange={(value) => setSelectedClient(value || null)}
+                >
+                  <SelectTrigger className="w-full bg-slate-700 border-slate-600">
+                    <SelectValue placeholder="Select client (optional)" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectItem value="" className="text-slate-400 focus:bg-slate-700">
+                      No client
+                    </SelectItem>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id} className="text-slate-200 focus:bg-slate-700">
+                        {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-slate-300 mb-1">Note (Optional)</label>
+                <textarea
+                  value={newTMNote}
+                  onChange={(e) => setNewTMNote(e.target.value)}
+                  placeholder="Description or notes about this TM..."
+                  rows={3}
+                  className="w-full bg-slate-700 rounded px-3 py-2 text-sm resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => {
+                  setShowTMModal(false)
+                  setNewTMName("")
+                  setNewTMNote("")
+                  setNewTMTargetLangs([])
+                }}
+                className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (newTMName.trim() && newTMTargetLangs.length > 0) {
+                    const newTM = await createTM(
+                      newTMName.trim(),
+                      sourceLang,
+                      newTMTargetLangs,
+                      selectedClient,
+                      newTMNote.trim() || undefined
+                    )
+                    if (newTM) {
+                      setTmList((prev) => [newTM, ...prev])
+                      setSelectedTM(newTM)
+                      setTmEntries([])
+                      toast.success(`TM "${newTMName}" created`)
+                    } else {
+                      toast.error("Failed to create TM")
+                    }
+                    setShowTMModal(false)
+                    setNewTMName("")
+                    setNewTMNote("")
+                    setNewTMTargetLangs([])
+                  }
+                }}
+                disabled={!newTMName.trim() || newTMTargetLangs.length === 0}
+                className="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-500 disabled:opacity-50 disabled:cursor-not-allowed rounded text-sm font-medium"
+              >
+                Create TM
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

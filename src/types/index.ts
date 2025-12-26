@@ -28,13 +28,13 @@ export interface TermbaseEntry {
   note: string;
 }
 
-// Supported languages
-export type LanguageCode = 'EN' | 'KO' | 'JA' | 'ZH' | 'ES' | 'FR' | 'DE';
+// Supported languages (ISO 639-1)
+export type LanguageCode = string;
 
 export interface Language {
-  code: LanguageCode;
+  code: string;
   name: string;
-  flag: string;
+  nativeName: string;
 }
 
 // Segmentation delimiter types
