@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useCallback, useMemo } from "react"
+import { useState, useCallback, useMemo, useEffect } from "react"
 import { toast } from "sonner"
 import Image from "next/image"
 import { useAuth } from "@/components/auth/AuthProvider"
+import { fetchUserTM, addTMEntry, deleteTMEntry as deleteDBTMEntry } from "@/lib/supabase/tm-service"
 import type {
   Segment,
   TMEntry,
@@ -52,11 +53,38 @@ import {
 type StatusFilter = "all" | "new" | "translated" | "confirmed"
 
 export default function CATToolPage() {
-  const { user, signOut, loading: authLoading } = useAuth()
+  const { user, signOut, loading: authLoading, isConfigured } = useAuth()
 
   // State
   const [segments, setSegments] = useState<Segment[]>([])
   const [tm, setTm] = useState<TMEntry[]>(SAMPLE_TM)
+  const [tmLoading, setTmLoading] = useState(false)
+
+  // Fetch user's TM from Supabase when logged in
+  useEffect(() => {
+    async function loadUserTM() {
+      if (user && isConfigured) {
+        setTmLoading(true)
+        try {
+          const userTM = await fetchUserTM()
+          if (userTM.length > 0) {
+            // Merge user TM with sample TM (user TM takes priority)
+            const mergedTM = [...userTM]
+            SAMPLE_TM.forEach((sample) => {
+              if (!mergedTM.find((t) => t.source === sample.source)) {
+                mergedTM.push(sample)
+              }
+            })
+            setTm(mergedTM)
+          }
+        } catch (error) {
+          console.error("Failed to load TM:", error)
+        }
+        setTmLoading(false)
+      }
+    }
+    loadUserTM()
+  }, [user, isConfigured])
   const [termbase, setTermbase] = useState<TermbaseEntry[]>(SAMPLE_TERMBASE)
   const [activeSegment, setActiveSegment] = useState<number>(0)
   const [view, setView] = useState<ViewType>("editor")
@@ -264,6 +292,11 @@ export default function CATToolPage() {
         const segIndex = segments.findIndex((s) => s.id === id)
         const tmEntryWithContext = createTMEntryWithContext(segIndex, segments)
         setTm((prev) => [...prev, tmEntryWithContext])
+
+        // Save to Supabase if user is logged in
+        if (user && isConfigured) {
+          addTMEntry(tmEntryWithContext, sourceLang, targetLang)
+        }
       }
 
       // Move to next unconfirmed segment
@@ -329,15 +362,25 @@ export default function CATToolPage() {
   }
 
   // Import TMX file
-  const importTmx = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const importTmx = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
     const reader = new FileReader()
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       const content = event.target?.result as string
       const imported = parseTmxFile(content)
       setTm((prev) => [...prev, ...imported])
+
+      // Save imported entries to Supabase if user is logged in
+      if (user && isConfigured && imported.length > 0) {
+        let savedCount = 0
+        for (const entry of imported) {
+          const success = await addTMEntry(entry, sourceLang, targetLang)
+          if (success) savedCount++
+        }
+        toast.success(`${savedCount}개 TM 항목이 저장되었습니다`)
+      }
     }
     reader.readAsText(file)
   }
@@ -1122,11 +1165,16 @@ export default function CATToolPage() {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <button
-                              onClick={() =>
+                              onClick={() => {
+                                const entryToDelete = tm[idx]
                                 setTm((prev) =>
                                   prev.filter((_, i) => i !== idx)
                                 )
-                              }
+                                // Delete from Supabase if user is logged in
+                                if (user && isConfigured && entryToDelete) {
+                                  deleteDBTMEntry(entryToDelete.source)
+                                }
+                              }}
                               className="text-red-400 hover:text-red-300 text-sm"
                             >
                               🗑️
