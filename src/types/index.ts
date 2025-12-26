@@ -11,6 +11,9 @@ export interface Segment {
 export interface TMEntry {
   source: string;
   target: string;
+  // Context for 101% matching (previous and next segment sources)
+  prevSource?: string;
+  nextSource?: string;
 }
 
 // Translation Memory match with calculated match rate

@@ -25,6 +25,11 @@ import {
 } from "@/lib/constants"
 import { calculateMatchRate, cn, countWords } from "@/lib/utils"
 import {
+  calculateContextMatchRate,
+  createTMEntryWithContext,
+  getMatchRateColorWithContext,
+} from "@/lib/context-match"
+import {
   processFile,
   exportToXlsx,
   exportToTmx,
@@ -69,7 +74,7 @@ export default function CATToolPage() {
   const [qaIssues, setQaIssues] = useState<QAIssue[]>([])
   const [instantQA, setInstantQA] = useState<boolean>(true)
 
-  // Find best TM match rate for a segment
+  // Find best TM match rate for a segment (without context)
   const findBestMatch = useCallback(
     (source: string): number => {
       let bestMatch = 0
@@ -78,6 +83,24 @@ export default function CATToolPage() {
         if (rate > bestMatch) bestMatch = rate
       })
       return bestMatch
+    },
+    [tm]
+  )
+
+  // Calculate match rates with context for all segments
+  const calculateAllMatchRates = useCallback(
+    (segs: { source: string }[]): number[] => {
+      return segs.map((_, idx) => {
+        // Create temporary segments array for context calculation
+        const tempSegments = segs.map((s, i) => ({
+          id: i,
+          source: s.source,
+          target: "",
+          status: "new" as const,
+          matchRate: 0,
+        }))
+        return calculateContextMatchRate(idx, tempSegments, tm)
+      })
     },
     [tm]
   )
@@ -162,14 +185,15 @@ export default function CATToolPage() {
 
     try {
       const texts = await processFile(file, delimiter)
-      // Calculate match rates at load time (fixed, won't change after confirm)
+      // Calculate match rates with context at load time (101% support)
+      const matchRates = calculateAllMatchRates(texts.map((source) => ({ source })))
       setSegments(
         texts.map((source, idx) => ({
           id: idx,
           source,
           target: "",
           status: "new",
-          matchRate: findBestMatch(source),
+          matchRate: matchRates[idx],
         }))
       )
       setActiveSegment(0)
@@ -231,9 +255,11 @@ export default function CATToolPage() {
         }
       }
 
-      // Add to TM if not already exists
+      // Add to TM with context if not already exists
       if (!tm.find((entry) => entry.source === seg.source)) {
-        setTm((prev) => [...prev, { source: seg.source, target: seg.target }])
+        const segIndex = segments.findIndex((s) => s.id === id)
+        const tmEntryWithContext = createTMEntryWithContext(segIndex, segments)
+        setTm((prev) => [...prev, tmEntryWithContext])
       }
 
       // Move to next unconfirmed segment
@@ -266,11 +292,11 @@ export default function CATToolPage() {
     updateSegment(segId, tmEntry.target)
   }
 
-  // Apply all 100% TM matches
+  // Apply all 100%+ TM matches (includes 101% context matches)
   const applyAll100Matches = () => {
     // Calculate count first before state update
     const segmentsToApply = segments.filter((seg) => {
-      if (seg.matchRate === 100 && seg.status === "new") {
+      if (seg.matchRate >= 100 && seg.status === "new") {
         const exactMatch = tm.find(
           (entry) => calculateMatchRate(seg.source, entry.source) === 100
         )
@@ -283,7 +309,7 @@ export default function CATToolPage() {
 
     setSegments((prev) =>
       prev.map((seg) => {
-        if (seg.matchRate === 100 && seg.status === "new") {
+        if (seg.matchRate >= 100 && seg.status === "new") {
           const exactMatch = tm.find(
             (entry) => calculateMatchRate(seg.source, entry.source) === 100
           )
@@ -322,11 +348,12 @@ export default function CATToolPage() {
     reader.onload = (event) => {
       const content = event.target?.result as string
       const imported = parseXliffFile(content)
-      // Calculate match rates at import time (fixed, won't change after confirm)
+      // Calculate match rates with context at import time (101% support)
+      const matchRates = calculateAllMatchRates(imported.map((seg) => ({ source: seg.source })))
       setSegments(
-        imported.map((seg) => ({
+        imported.map((seg, idx) => ({
           ...seg,
-          matchRate: findBestMatch(seg.source),
+          matchRate: matchRates[idx],
         }))
       )
       setActiveSegment(0)
@@ -685,14 +712,14 @@ export default function CATToolPage() {
                         onClick={() => {
                           const count = applyAll100Matches()
                           if (count > 0) {
-                            toast.success(`${count}개 세그먼트에 100% TM 매치 적용됨`)
+                            toast.success(`${count}개 세그먼트에 100%+ TM 매치 적용됨`)
                           }
                         }}
-                        disabled={segments.filter((s) => s.matchRate === 100 && s.status === "new").length === 0}
+                        disabled={segments.filter((s) => s.matchRate >= 100 && s.status === "new").length === 0}
                         className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs font-medium transition"
-                        title="Apply all 100% TM matches to untranslated segments"
+                        title="Apply all 100%+ TM matches (including 101% context) to untranslated segments"
                       >
-                        Apply 100% ({segments.filter((s) => s.matchRate === 100 && s.status === "new").length})
+                        Apply 100%+ ({segments.filter((s) => s.matchRate >= 100 && s.status === "new").length})
                       </button>
                       <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
                         <input

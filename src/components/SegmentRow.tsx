@@ -208,7 +208,9 @@ export const SegmentRow = memo(function SegmentRow({
               <span
                 className={cn(
                   "text-xs px-2 py-0.5 rounded-full font-bold",
-                  matchRate === 100
+                  matchRate === 101
+                    ? "bg-purple-600"
+                    : matchRate === 100
                     ? "bg-green-600"
                     : matchRate >= 85
                     ? "bg-yellow-600"
