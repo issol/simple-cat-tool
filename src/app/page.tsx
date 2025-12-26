@@ -88,6 +88,7 @@ export default function CATToolPage() {
   const [newTMNote, setNewTMNote] = useState("")
   const [newTMTargetLangs, setNewTMTargetLangs] = useState<string[]>([])
   const [targetLangDropdown, setTargetLangDropdown] = useState<string | undefined>(undefined)
+  const [tmEditMode, setTmEditMode] = useState(false)
 
   // Termbase State
   const [termbase, setTermbase] = useState<TermbaseEntry[]>([])
@@ -1261,6 +1262,7 @@ export default function CATToolPage() {
                         key={tmItem.id}
                         onClick={async () => {
                           setSelectedTM(tmItem)
+                          setTmEditMode(false) // Reset edit mode when switching TM
                           const entries = await fetchTMEntries(tmItem.id)
                           setTmEntries(entries)
                         }}
@@ -1336,13 +1338,15 @@ export default function CATToolPage() {
                         </div>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => {
-                              // TODO: Edit TM modal
-                              toast.info("Edit feature coming soon")
-                            }}
-                            className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm"
+                            onClick={() => setTmEditMode(!tmEditMode)}
+                            className={cn(
+                              "px-4 py-1.5 rounded text-sm font-medium transition",
+                              tmEditMode
+                                ? "bg-teal-600 hover:bg-teal-500 text-white"
+                                : "bg-slate-700 hover:bg-slate-600"
+                            )}
                           >
-                            Edit
+                            {tmEditMode ? "Done" : "Edit"}
                           </button>
                         </div>
                       </div>
@@ -1394,7 +1398,14 @@ export default function CATToolPage() {
                     {/* TM Entries Section */}
                     <div className="bg-slate-800 rounded-xl p-6">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-semibold text-white">TM Entries</h3>
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-lg font-semibold text-white">TM Entries</h3>
+                          {tmEditMode && (
+                            <span className="px-2 py-0.5 bg-teal-600/30 text-teal-300 text-xs rounded">
+                              Edit Mode
+                            </span>
+                          )}
+                        </div>
                         <input
                           type="text"
                           placeholder="Search entries..."
@@ -1404,60 +1415,116 @@ export default function CATToolPage() {
                         />
                       </div>
 
-                      {/* Add Entry Form */}
-                      <div className="flex gap-2 bg-slate-700/50 p-4 rounded-xl mb-4">
-                      <input
-                        type="text"
-                        placeholder={`Source (${selectedTM.source_lang})`}
-                        value={newTmEntry.source}
-                        onChange={(e) =>
-                          setNewTmEntry((prev) => ({ ...prev, source: e.target.value }))
-                        }
-                        className="flex-1 bg-slate-700 rounded-lg px-4 py-2 text-sm"
-                      />
-                      <input
-                        type="text"
-                        placeholder={`Target (${selectedTM.target_langs[0] || targetLang})`}
-                        value={newTmEntry.target}
-                        onChange={(e) =>
-                          setNewTmEntry((prev) => ({ ...prev, target: e.target.value }))
-                        }
-                        className="flex-1 bg-slate-700 rounded-lg px-4 py-2 text-sm"
-                      />
-                      <button
-                        onClick={async () => {
-                          if (newTmEntry.source && newTmEntry.target && selectedTM) {
-                            const tmEntry: TMEntry = {
-                              source: newTmEntry.source,
-                              target: newTmEntry.target,
-                            }
-                            const success = await addTMEntry(
-                              selectedTM.id,
-                              tmEntry,
-                              selectedTM.target_langs[0] || targetLang
-                            )
-                            if (success) {
-                              const entries = await fetchTMEntries(selectedTM.id)
-                              setTmEntries(entries)
-                              setTm((prev) => [...prev, tmEntry])
-                              // Update entry count in list
-                              setTmList((prev) =>
-                                prev.map((t) =>
-                                  t.id === selectedTM.id
-                                    ? { ...t, entry_count: entries.length }
-                                    : t
-                                )
-                              )
-                              toast.success("Entry added")
-                            }
-                            setNewTmEntry({ source: "", target: "" })
-                          }
-                        }}
-                        className="px-6 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-sm font-medium"
-                      >
-                        + Add
-                      </button>
-                    </div>
+                      {/* Add Entry Form & TMX Import - Only in Edit Mode */}
+                      {tmEditMode && (
+                        <div className="space-y-3 mb-4">
+                          <div className="flex gap-2 bg-slate-700/50 p-4 rounded-xl">
+                            <input
+                              type="text"
+                              placeholder={`Source (${selectedTM.source_lang})`}
+                              value={newTmEntry.source}
+                              onChange={(e) =>
+                                setNewTmEntry((prev) => ({ ...prev, source: e.target.value }))
+                              }
+                              className="flex-1 bg-slate-700 rounded-lg px-4 py-2 text-sm"
+                            />
+                            <input
+                              type="text"
+                              placeholder={`Target (${selectedTM.target_langs[0] || targetLang})`}
+                              value={newTmEntry.target}
+                              onChange={(e) =>
+                                setNewTmEntry((prev) => ({ ...prev, target: e.target.value }))
+                              }
+                              className="flex-1 bg-slate-700 rounded-lg px-4 py-2 text-sm"
+                            />
+                            <button
+                              onClick={async () => {
+                                if (newTmEntry.source && newTmEntry.target && selectedTM) {
+                                  const tmEntry: TMEntry = {
+                                    source: newTmEntry.source,
+                                    target: newTmEntry.target,
+                                  }
+                                  const success = await addTMEntry(
+                                    selectedTM.id,
+                                    tmEntry,
+                                    selectedTM.target_langs[0] || targetLang
+                                  )
+                                  if (success) {
+                                    const entries = await fetchTMEntries(selectedTM.id)
+                                    setTmEntries(entries)
+                                    setTm((prev) => [...prev, tmEntry])
+                                    setTmList((prev) =>
+                                      prev.map((t) =>
+                                        t.id === selectedTM.id
+                                          ? { ...t, entry_count: entries.length }
+                                          : t
+                                      )
+                                    )
+                                    toast.success("Entry added")
+                                  }
+                                  setNewTmEntry({ source: "", target: "" })
+                                }
+                              }}
+                              className="px-6 py-2 bg-teal-600 hover:bg-teal-500 rounded-lg text-sm font-medium"
+                            >
+                              + Add
+                            </button>
+                          </div>
+
+                          {/* TMX Import */}
+                          <div className="flex items-center gap-3 bg-slate-700/30 p-3 rounded-xl">
+                            <span className="text-sm text-slate-400">Import from file:</span>
+                            <label className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm cursor-pointer transition">
+                              📁 Upload TMX
+                              <input
+                                type="file"
+                                accept=".tmx"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0]
+                                  if (!file || !selectedTM) return
+
+                                  const reader = new FileReader()
+                                  reader.onload = async (event) => {
+                                    const content = event.target?.result as string
+                                    const imported = parseTmxFile(content)
+
+                                    if (imported.length === 0) {
+                                      toast.error("No entries found in TMX file")
+                                      return
+                                    }
+
+                                    const savedCount = await importTMEntries(
+                                      selectedTM.id,
+                                      imported,
+                                      selectedTM.target_langs[0] || targetLang
+                                    )
+
+                                    // Refresh entries
+                                    const entries = await fetchTMEntries(selectedTM.id)
+                                    setTmEntries(entries)
+                                    setTm((prev) => [...prev, ...imported])
+                                    setTmList((prev) =>
+                                      prev.map((t) =>
+                                        t.id === selectedTM.id
+                                          ? { ...t, entry_count: entries.length }
+                                          : t
+                                      )
+                                    )
+
+                                    toast.success(`${savedCount} entries imported from TMX`)
+                                  }
+                                  reader.readAsText(file)
+                                  e.target.value = ""
+                                }}
+                              />
+                            </label>
+                            <span className="text-xs text-slate-500">
+                              Supports standard TMX format
+                            </span>
+                          </div>
+                        </div>
+                      )}
 
                     {/* Entries Table */}
                     {tmEntries.filter(
@@ -1472,7 +1539,7 @@ export default function CATToolPage() {
                         </p>
                       </div>
                     ) : (
-                      <div className="flex-1 overflow-auto bg-slate-800 rounded-xl">
+                      <div className="flex-1 overflow-auto bg-slate-700/30 rounded-xl">
                         <table className="w-full">
                           <thead className="bg-slate-700 sticky top-0">
                             <tr>
@@ -1483,9 +1550,11 @@ export default function CATToolPage() {
                               <th className="px-4 py-3 text-left text-sm text-slate-300">
                                 Target ({selectedTM.target_langs.join(", ")})
                               </th>
-                              <th className="px-4 py-3 text-right text-sm text-slate-300 w-20">
-                                Delete
-                              </th>
+                              {tmEditMode && (
+                                <th className="px-4 py-3 text-right text-sm text-slate-300 w-20">
+                                  Actions
+                                </th>
+                              )}
                             </tr>
                           </thead>
                           <tbody>
@@ -1503,30 +1572,34 @@ export default function CATToolPage() {
                                   <td className="px-4 py-3 text-slate-500 text-sm">{idx + 1}</td>
                                   <td className="px-4 py-3 text-sm">{entry.source}</td>
                                   <td className="px-4 py-3 text-sm text-slate-300">{entry.target}</td>
-                                  <td className="px-4 py-3 text-right">
-                                    <button
-                                      onClick={async () => {
-                                        await deleteTMEntryById(entry.id, selectedTM.id)
-                                        setTmEntries((prev) =>
-                                          prev.filter((e) => e.id !== entry.id)
-                                        )
-                                        setTm((prev) =>
-                                          prev.filter((e) => e.source !== entry.source)
-                                        )
-                                        setTmList((prev) =>
-                                          prev.map((t) =>
-                                            t.id === selectedTM.id
-                                              ? { ...t, entry_count: t.entry_count - 1 }
-                                              : t
-                                          )
-                                        )
-                                        toast.success("Entry deleted")
-                                      }}
-                                      className="text-red-400 hover:text-red-300 text-sm"
-                                    >
-                                      🗑️
-                                    </button>
-                                  </td>
+                                  {tmEditMode && (
+                                    <td className="px-4 py-3 text-right">
+                                      <button
+                                        onClick={async () => {
+                                          if (confirm("Delete this entry?")) {
+                                            await deleteTMEntryById(entry.id, selectedTM.id)
+                                            setTmEntries((prev) =>
+                                              prev.filter((e) => e.id !== entry.id)
+                                            )
+                                            setTm((prev) =>
+                                              prev.filter((e) => e.source !== entry.source)
+                                            )
+                                            setTmList((prev) =>
+                                              prev.map((t) =>
+                                                t.id === selectedTM.id
+                                                  ? { ...t, entry_count: t.entry_count - 1 }
+                                                  : t
+                                              )
+                                            )
+                                            toast.success("Entry deleted")
+                                          }
+                                        }}
+                                        className="text-red-400 hover:text-red-300 text-sm"
+                                      >
+                                        🗑️
+                                      </button>
+                                    </td>
+                                  )}
                                 </tr>
                               ))}
                           </tbody>
