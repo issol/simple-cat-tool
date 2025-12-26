@@ -87,6 +87,7 @@ export default function CATToolPage() {
   const [newTMName, setNewTMName] = useState("")
   const [newTMNote, setNewTMNote] = useState("")
   const [newTMTargetLangs, setNewTMTargetLangs] = useState<string[]>([])
+  const [targetLangDropdown, setTargetLangDropdown] = useState<string | undefined>(undefined)
 
   // Termbase State
   const [termbase, setTermbase] = useState<TermbaseEntry[]>([])
@@ -1959,11 +1960,12 @@ export default function CATToolPage() {
                     })}
                   </div>
                   <Select
-                    value=""
+                    value={targetLangDropdown}
                     onValueChange={(value) => {
                       if (value && !newTMTargetLangs.includes(value)) {
                         setNewTMTargetLangs((prev) => [...prev, value])
                       }
+                      setTargetLangDropdown(undefined)
                     }}
                   >
                     <SelectTrigger className="w-full bg-slate-700 border-slate-600">
@@ -1996,14 +1998,14 @@ export default function CATToolPage() {
               <div>
                 <label className="block text-sm text-slate-300 mb-1">Client (Optional)</label>
                 <Select
-                  value={selectedClient || ""}
-                  onValueChange={(value) => setSelectedClient(value || null)}
+                  value={selectedClient || "__none__"}
+                  onValueChange={(value) => setSelectedClient(value === "__none__" ? null : value)}
                 >
                   <SelectTrigger className="w-full bg-slate-700 border-slate-600">
                     <SelectValue placeholder="Select client (optional)" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    <SelectItem value="" className="text-slate-400 focus:bg-slate-700">
+                    <SelectItem value="__none__" className="text-slate-400 focus:bg-slate-700">
                       No client
                     </SelectItem>
                     {clients.map((client) => (
@@ -2034,6 +2036,7 @@ export default function CATToolPage() {
                   setNewTMName("")
                   setNewTMNote("")
                   setNewTMTargetLangs([])
+                  setTargetLangDropdown(undefined)
                 }}
                 className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm"
               >
@@ -2061,6 +2064,7 @@ export default function CATToolPage() {
                     setNewTMName("")
                     setNewTMNote("")
                     setNewTMTargetLangs([])
+                    setTargetLangDropdown(undefined)
                   }
                 }}
                 disabled={!newTMName.trim() || newTMTargetLangs.length === 0}
