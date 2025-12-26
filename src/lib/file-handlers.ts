@@ -4,7 +4,9 @@ import type { DelimiterType, AnalysisData, Segment } from '@/types';
 import { segmentText } from './utils';
 
 /**
- * Handle XLSX file and extract text from all cells
+ * Handle XLSX file and extract text
+ * - If file has headers (Content, Source, Text, etc.), extract from that column
+ * - Otherwise, extract from second column if multi-column, or all text if single column
  */
 export async function handleXlsxFile(file: File): Promise<string[]> {
   const data = await file.arrayBuffer();
@@ -15,13 +17,77 @@ export async function handleXlsxFile(file: File): Promise<string[]> {
     { header: 1 }
   );
 
+  if (jsonData.length === 0) return [];
+
   const texts: string[] = [];
-  jsonData.forEach((row) => {
-    row.forEach((cell) => {
-      if (cell && typeof cell === 'string' && cell.trim()) {
-        texts.push(cell.trim());
+  const firstRow = jsonData[0];
+
+  // Check if first row looks like headers
+  const headerKeywords = ['content', 'source', 'text', 'segment', 'original', '원문', '소스'];
+  let contentColumnIndex = -1;
+
+  // Find content column by header name
+  if (Array.isArray(firstRow)) {
+    firstRow.forEach((cell, idx) => {
+      if (typeof cell === 'string') {
+        const cellLower = cell.toLowerCase().trim();
+        if (headerKeywords.includes(cellLower)) {
+          contentColumnIndex = idx;
+        }
       }
     });
+  }
+
+  // If we found a content column header, extract from that column (skip header row)
+  if (contentColumnIndex !== -1) {
+    for (let i = 1; i < jsonData.length; i++) {
+      const row = jsonData[i];
+      if (Array.isArray(row) && row[contentColumnIndex]) {
+        const cell = row[contentColumnIndex];
+        if (typeof cell === 'string' && cell.trim()) {
+          texts.push(cell.trim());
+        } else if (typeof cell === 'number') {
+          texts.push(String(cell));
+        }
+      }
+    }
+    return texts;
+  }
+
+  // If multi-column without recognized header, use second column (assuming first is ID/key)
+  const hasMultipleColumns = firstRow && firstRow.length > 1;
+  if (hasMultipleColumns) {
+    // Check if first row looks like header (non-sentence text)
+    const firstCellIsHeader = typeof firstRow[0] === 'string' &&
+      !firstRow[0].includes(' ') &&
+      firstRow[0].length < 30;
+
+    const startIdx = firstCellIsHeader ? 1 : 0;
+    const colIdx = 1; // Use second column
+
+    for (let i = startIdx; i < jsonData.length; i++) {
+      const row = jsonData[i];
+      if (Array.isArray(row) && row[colIdx]) {
+        const cell = row[colIdx];
+        if (typeof cell === 'string' && cell.trim()) {
+          texts.push(cell.trim());
+        } else if (typeof cell === 'number') {
+          texts.push(String(cell));
+        }
+      }
+    }
+    return texts;
+  }
+
+  // Single column - extract all text
+  jsonData.forEach((row) => {
+    if (Array.isArray(row)) {
+      row.forEach((cell) => {
+        if (cell && typeof cell === 'string' && cell.trim()) {
+          texts.push(cell.trim());
+        }
+      });
+    }
   });
 
   return texts;
