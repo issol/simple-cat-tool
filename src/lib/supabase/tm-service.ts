@@ -304,21 +304,50 @@ async function updateTMEntryCount(tmId: string): Promise<void> {
 }
 
 /**
- * Import multiple TM entries (from TMX file)
+ * Import multiple TM entries (from TMX file) - Batch insert
  */
 export async function importTMEntries(
   tmId: string,
   entries: TMEntry[],
   targetLang: string
 ): Promise<number> {
-  let imported = 0;
+  const supabase = createClient();
+  if (!supabase || entries.length === 0) return 0;
 
-  for (const entry of entries) {
-    const success = await addTMEntry(tmId, entry, targetLang);
-    if (success) imported++;
+  // Prepare batch data
+  const batchData = entries.map(entry => ({
+    tm_id: tmId,
+    source: entry.source,
+    target: entry.target,
+    target_lang: targetLang,
+    prev_source: entry.prevSource || null,
+    next_source: entry.nextSource || null,
+  }));
+
+  // Batch insert in chunks of 500 (Supabase limit)
+  const chunkSize = 500;
+  let totalImported = 0;
+
+  for (let i = 0; i < batchData.length; i += chunkSize) {
+    const chunk = batchData.slice(i, i + chunkSize);
+
+    const { data, error } = await supabase
+      .from('tm_entries')
+      .insert(chunk)
+      .select();
+
+    if (error) {
+      console.error('Error batch importing TM entries:', error);
+      continue;
+    }
+
+    totalImported += data?.length || 0;
   }
 
-  return imported;
+  // Update entry count once at the end
+  await updateTMEntryCount(tmId);
+
+  return totalImported;
 }
 
 // ============ Legacy Support (for backward compatibility) ============

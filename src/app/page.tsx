@@ -17,8 +17,17 @@ import {
   type TranslationMemory,
   type DBTMEntry,
 } from "@/lib/supabase/tm-service"
-import { fetchUserTermbase, fetchUserTermbaseWithDetails, addTermbaseEntry, deleteTermbaseEntryById } from "@/lib/supabase/termbase-service"
-import { fetchUserClients, createClientEntry, type Client } from "@/lib/supabase/client-service"
+import {
+  fetchUserTermbase,
+  fetchUserTermbaseWithDetails,
+  addTermbaseEntry,
+  deleteTermbaseEntryById,
+} from "@/lib/supabase/termbase-service"
+import {
+  fetchUserClients,
+  createClientEntry,
+  type Client,
+} from "@/lib/supabase/client-service"
 import type { DBTermbaseEntry } from "@/lib/supabase/termbase-service"
 import type {
   Segment,
@@ -36,7 +45,11 @@ import type {
   QAIssueType,
 } from "@/types"
 import { MATCH_TIERS } from "@/lib/constants"
-import { ISO_639_1_LANGUAGES, COMMON_LANGUAGES, getLanguageByCode } from "@/lib/languages"
+import {
+  ISO_639_1_LANGUAGES,
+  COMMON_LANGUAGES,
+  getLanguageByCode,
+} from "@/lib/languages"
 import {
   Select,
   SelectContent,
@@ -87,7 +100,9 @@ export default function CATToolPage() {
   const [newTMName, setNewTMName] = useState("")
   const [newTMNote, setNewTMNote] = useState("")
   const [newTMTargetLangs, setNewTMTargetLangs] = useState<string[]>([])
-  const [targetLangDropdown, setTargetLangDropdown] = useState<string | undefined>(undefined)
+  const [targetLangDropdown, setTargetLangDropdown] = useState<
+    string | undefined
+  >(undefined)
   const [tmEditMode, setTmEditMode] = useState(false)
 
   // Termbase State
@@ -118,7 +133,9 @@ export default function CATToolPage() {
 
           // Fetch all TM entries for matching
           if (userTMs.length > 0) {
-            const allEntries = await fetchAllTMEntriesForMatching(userTMs.map(t => t.id))
+            const allEntries = await fetchAllTMEntriesForMatching(
+              userTMs.map((t) => t.id)
+            )
             setTm(allEntries)
           } else {
             setTm([])
@@ -129,7 +146,9 @@ export default function CATToolPage() {
           setTermbase(userTermbase)
 
           // Fetch Termbase with details for deletion by ID
-          const userTermbaseDB = await fetchUserTermbaseWithDetails(selectedClient)
+          const userTermbaseDB = await fetchUserTermbaseWithDetails(
+            selectedClient
+          )
           setTermbaseDB(userTermbaseDB)
         } catch (error) {
           console.error("Failed to load data:", error)
@@ -161,7 +180,10 @@ export default function CATToolPage() {
     target: "",
     note: "",
   })
-  const [newTmEntry, setNewTmEntry] = useState<{ source: string; target: string }>({
+  const [newTmEntry, setNewTmEntry] = useState<{
+    source: string
+    target: string
+  }>({
     source: "",
     target: "",
   })
@@ -262,7 +284,6 @@ export default function CATToolPage() {
     [tm]
   )
 
-
   // Find termbase matches in text
   const findTermMatches = useCallback(
     (text: string): TermbaseEntry[] => {
@@ -284,7 +305,9 @@ export default function CATToolPage() {
     try {
       const texts = await processFile(file, delimiter)
       // Calculate match rates with context at load time (101% support)
-      const matchRates = calculateAllMatchRates(texts.map((source) => ({ source })))
+      const matchRates = calculateAllMatchRates(
+        texts.map((source) => ({ source }))
+      )
       setSegments(
         texts.map((source, idx) => ({
           id: idx,
@@ -341,10 +364,17 @@ export default function CATToolPage() {
 
       // Run instant QA on confirmed segment
       if (instantQA) {
-        const enabledTypes = qaChecks.filter((c) => c.enabled).map((c) => c.type)
+        const enabledTypes = qaChecks
+          .filter((c) => c.enabled)
+          .map((c) => c.type)
         const confirmedSeg = updatedSegments.find((s) => s.id === id)
         if (confirmedSeg) {
-          const newIssues = runSegmentQA(confirmedSeg, updatedSegments, termbase, enabledTypes)
+          const newIssues = runSegmentQA(
+            confirmedSeg,
+            updatedSegments,
+            termbase,
+            enabledTypes
+          )
           // Remove old issues for this segment and add new ones
           setQaIssues((prev) => [
             ...prev.filter((i) => i.segmentId !== id),
@@ -417,7 +447,11 @@ export default function CATToolPage() {
             (entry) => calculateMatchRate(seg.source, entry.source) === 100
           )
           if (exactMatch) {
-            return { ...seg, target: exactMatch.target, status: "translated" as const }
+            return {
+              ...seg,
+              target: exactMatch.target,
+              status: "translated" as const,
+            }
           }
         }
         return seg
@@ -440,7 +474,11 @@ export default function CATToolPage() {
 
       // Save imported entries to Supabase if user is logged in and TM is selected
       if (user && isConfigured && selectedTM && imported.length > 0) {
-        const savedCount = await importTMEntries(selectedTM.id, imported, targetLang)
+        const savedCount = await importTMEntries(
+          selectedTM.id,
+          imported,
+          targetLang
+        )
         toast.success(`${savedCount}개 TM 항목이 저장되었습니다`)
       }
     }
@@ -458,7 +496,9 @@ export default function CATToolPage() {
       const content = event.target?.result as string
       const imported = parseXliffFile(content)
       // Calculate match rates with context at import time (101% support)
-      const matchRates = calculateAllMatchRates(imported.map((seg) => ({ source: seg.source })))
+      const matchRates = calculateAllMatchRates(
+        imported.map((seg) => ({ source: seg.source }))
+      )
       setSegments(
         imported.map((seg, idx) => ({
           ...seg,
@@ -521,26 +561,38 @@ export default function CATToolPage() {
           </div>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              {(["editor", "analysis", "qa", "tm", "termbase"] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => {
-                    setView(v)
-                    setSearchTerm("")
-                  }}
-                  className={cn(
-                    "px-4 py-2 rounded transition",
-                    view === v ? "bg-teal-600" : "bg-slate-700 hover:bg-slate-600",
-                    v === "qa" && qaIssues.filter((i) => !i.ignored).length > 0 && view !== v && "ring-2 ring-yellow-500"
-                  )}
-                >
-                  {v === "editor" && "Editor"}
-                  {v === "analysis" && "Analysis"}
-                  {v === "qa" && `QA ${qaIssues.filter((i) => !i.ignored).length > 0 ? `(${qaIssues.filter((i) => !i.ignored).length})` : ""}`}
-                  {v === "tm" && `TM (${tm.length})`}
-                  {v === "termbase" && `TB (${termbase.length})`}
-                </button>
-              ))}
+              {(["editor", "analysis", "qa", "tm", "termbase"] as const).map(
+                (v) => (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      setView(v)
+                      setSearchTerm("")
+                    }}
+                    className={cn(
+                      "px-4 py-2 rounded transition",
+                      view === v
+                        ? "bg-teal-600"
+                        : "bg-slate-700 hover:bg-slate-600",
+                      v === "qa" &&
+                        qaIssues.filter((i) => !i.ignored).length > 0 &&
+                        view !== v &&
+                        "ring-2 ring-yellow-500"
+                    )}
+                  >
+                    {v === "editor" && "Editor"}
+                    {v === "analysis" && "Analysis"}
+                    {v === "qa" &&
+                      `QA ${
+                        qaIssues.filter((i) => !i.ignored).length > 0
+                          ? `(${qaIssues.filter((i) => !i.ignored).length})`
+                          : ""
+                      }`}
+                    {v === "tm" && `TM (${tm.length})`}
+                    {v === "termbase" && `TB (${termbase.length})`}
+                  </button>
+                )
+              )}
             </div>
 
             {/* User Info */}
@@ -598,26 +650,48 @@ export default function CATToolPage() {
               <label className="block text-xs text-slate-400 mb-1">
                 Source
               </label>
-              <Select value={sourceLang} onValueChange={(value) => setSourceLang(value)}>
+              <Select
+                value={sourceLang}
+                onValueChange={(value) => setSourceLang(value)}
+              >
                 <SelectTrigger className="w-full bg-slate-700 border-slate-600 text-sm h-9">
                   <SelectValue>
-                    {getLanguageByCode(sourceLang)?.name || sourceLang.toUpperCase()}
+                    {getLanguageByCode(sourceLang)?.name ||
+                      sourceLang.toUpperCase()}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 max-h-[300px]">
                   <SelectGroup>
                     <SelectLabel className="text-slate-400">Common</SelectLabel>
                     {COMMON_LANGUAGES.map((lang) => (
-                      <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700 focus:text-white">
-                        {lang.name} <span className="text-slate-400 ml-1">({lang.code})</span>
+                      <SelectItem
+                        key={lang.code}
+                        value={lang.code}
+                        className="text-slate-200 focus:bg-slate-700 focus:text-white"
+                      >
+                        {lang.name}{" "}
+                        <span className="text-slate-400 ml-1">
+                          ({lang.code})
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectGroup>
                   <SelectGroup>
-                    <SelectLabel className="text-slate-400">All Languages</SelectLabel>
-                    {ISO_639_1_LANGUAGES.filter(l => !COMMON_LANGUAGES.find(c => c.code === l.code)).map((lang) => (
-                      <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700 focus:text-white">
-                        {lang.name} <span className="text-slate-400 ml-1">({lang.code})</span>
+                    <SelectLabel className="text-slate-400">
+                      All Languages
+                    </SelectLabel>
+                    {ISO_639_1_LANGUAGES.filter(
+                      (l) => !COMMON_LANGUAGES.find((c) => c.code === l.code)
+                    ).map((lang) => (
+                      <SelectItem
+                        key={lang.code}
+                        value={lang.code}
+                        className="text-slate-200 focus:bg-slate-700 focus:text-white"
+                      >
+                        {lang.name}{" "}
+                        <span className="text-slate-400 ml-1">
+                          ({lang.code})
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -628,26 +702,48 @@ export default function CATToolPage() {
               <label className="block text-xs text-slate-400 mb-1">
                 Target
               </label>
-              <Select value={targetLang} onValueChange={(value) => setTargetLang(value)}>
+              <Select
+                value={targetLang}
+                onValueChange={(value) => setTargetLang(value)}
+              >
                 <SelectTrigger className="w-full bg-slate-700 border-slate-600 text-sm h-9">
                   <SelectValue>
-                    {getLanguageByCode(targetLang)?.name || targetLang.toUpperCase()}
+                    {getLanguageByCode(targetLang)?.name ||
+                      targetLang.toUpperCase()}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 max-h-[300px]">
                   <SelectGroup>
                     <SelectLabel className="text-slate-400">Common</SelectLabel>
                     {COMMON_LANGUAGES.map((lang) => (
-                      <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700 focus:text-white">
-                        {lang.name} <span className="text-slate-400 ml-1">({lang.code})</span>
+                      <SelectItem
+                        key={lang.code}
+                        value={lang.code}
+                        className="text-slate-200 focus:bg-slate-700 focus:text-white"
+                      >
+                        {lang.name}{" "}
+                        <span className="text-slate-400 ml-1">
+                          ({lang.code})
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectGroup>
                   <SelectGroup>
-                    <SelectLabel className="text-slate-400">All Languages</SelectLabel>
-                    {ISO_639_1_LANGUAGES.filter(l => !COMMON_LANGUAGES.find(c => c.code === l.code)).map((lang) => (
-                      <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700 focus:text-white">
-                        {lang.name} <span className="text-slate-400 ml-1">({lang.code})</span>
+                    <SelectLabel className="text-slate-400">
+                      All Languages
+                    </SelectLabel>
+                    {ISO_639_1_LANGUAGES.filter(
+                      (l) => !COMMON_LANGUAGES.find((c) => c.code === l.code)
+                    ).map((lang) => (
+                      <SelectItem
+                        key={lang.code}
+                        value={lang.code}
+                        className="text-slate-200 focus:bg-slate-700 focus:text-white"
+                      >
+                        {lang.name}{" "}
+                        <span className="text-slate-400 ml-1">
+                          ({lang.code})
+                        </span>
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -857,16 +953,22 @@ export default function CATToolPage() {
                     <p className="text-2xl font-medium mb-2">
                       Upload a file to start
                     </p>
-                    <p className="text-sm">Supported: .xlsx, .docx, .txt, .xliff</p>
+                    <p className="text-sm">
+                      Supported: .xlsx, .docx, .txt, .xliff
+                    </p>
                     <div className="mt-6 p-4 bg-slate-800 rounded-lg text-left max-w-md">
                       <p className="text-sm text-slate-400 mb-2">Tips:</p>
                       <ul className="text-xs text-slate-500 space-y-1">
                         <li>• Excel files: extracts text from all cells</li>
                         <li>• Word files: segments by sentence</li>
-                        <li>• XLIFF files: resume previous translation projects</li>
+                        <li>
+                          • XLIFF files: resume previous translation projects
+                        </li>
                         <li>• TM matches are shown automatically</li>
                       </ul>
-                      <p className="text-sm text-slate-400 mt-4 mb-2">Shortcuts:</p>
+                      <p className="text-sm text-slate-400 mt-4 mb-2">
+                        Shortcuts:
+                      </p>
                       <ul className="text-xs text-slate-500 space-y-1">
                         <li>• Ctrl+Enter: Confirm segment</li>
                         <li>• Ctrl+↑/↓: Navigate segments</li>
@@ -910,14 +1012,26 @@ export default function CATToolPage() {
                         onClick={() => {
                           const count = applyAll100Matches()
                           if (count > 0) {
-                            toast.success(`${count}개 세그먼트에 100%+ TM 매치 적용됨`)
+                            toast.success(
+                              `${count}개 세그먼트에 100%+ TM 매치 적용됨`
+                            )
                           }
                         }}
-                        disabled={segments.filter((s) => s.matchRate >= 100 && s.status === "new").length === 0}
+                        disabled={
+                          segments.filter(
+                            (s) => s.matchRate >= 100 && s.status === "new"
+                          ).length === 0
+                        }
                         className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded text-xs font-medium transition"
                         title="Apply all 100%+ TM matches (including 101% context) to untranslated segments"
                       >
-                        Apply 100%+ ({segments.filter((s) => s.matchRate >= 100 && s.status === "new").length})
+                        Apply 100%+ (
+                        {
+                          segments.filter(
+                            (s) => s.matchRate >= 100 && s.status === "new"
+                          ).length
+                        }
+                        )
                       </button>
                       <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
                         <input
@@ -934,7 +1048,9 @@ export default function CATToolPage() {
                   {/* Segments */}
                   <div className="flex-1 overflow-auto space-y-4">
                     {filteredSegments.map((seg) => {
-                      const originalIndex = segments.findIndex((s) => s.id === seg.id)
+                      const originalIndex = segments.findIndex(
+                        (s) => s.id === seg.id
+                      )
                       const isActive = originalIndex === activeSegment
                       const segmentQaIssues = qaIssues.filter(
                         (i) => i.segmentId === seg.id && !i.ignored
@@ -949,7 +1065,9 @@ export default function CATToolPage() {
                           sourceLang={sourceLang}
                           targetLang={targetLang}
                           tmMatches={isActive ? findTmMatches(seg.source) : []}
-                          termMatches={isActive ? findTermMatches(seg.source) : []}
+                          termMatches={
+                            isActive ? findTermMatches(seg.source) : []
+                          }
                           qaIssues={segmentQaIssues}
                           onSelect={setActiveSegment}
                           onUpdate={updateSegment}
@@ -965,10 +1083,16 @@ export default function CATToolPage() {
                   <div className="mt-4 pt-4 border-t border-slate-700 flex items-center justify-between text-sm">
                     <div className="flex items-center gap-6 text-slate-400">
                       <span>
-                        Segments: <span className="text-white font-medium">{stats.confirmed}/{stats.total}</span>
+                        Segments:{" "}
+                        <span className="text-white font-medium">
+                          {stats.confirmed}/{stats.total}
+                        </span>
                       </span>
                       <span>
-                        Words: <span className="text-white font-medium">{totalWords.toLocaleString()}</span>
+                        Words:{" "}
+                        <span className="text-white font-medium">
+                          {totalWords.toLocaleString()}
+                        </span>
                       </span>
                     </div>
                     <div className="text-slate-500 text-xs">
@@ -1275,16 +1399,25 @@ export default function CATToolPage() {
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1 min-w-0">
-                            <h3 className="font-medium truncate">{tmItem.name}</h3>
+                            <h3 className="font-medium truncate">
+                              {tmItem.name}
+                            </h3>
                             <p className="text-xs text-slate-400 mt-1">
-                              {tmItem.source_lang.toUpperCase()} → {tmItem.target_langs.map(l => l.toUpperCase()).join(", ")}
+                              {tmItem.source_lang.toUpperCase()} →{" "}
+                              {tmItem.target_langs
+                                .map((l) => l.toUpperCase())
+                                .join(", ")}
                             </p>
                             {tmItem.note && (
-                              <p className="text-xs text-slate-500 mt-1 truncate">{tmItem.note}</p>
+                              <p className="text-xs text-slate-500 mt-1 truncate">
+                                {tmItem.note}
+                              </p>
                             )}
                           </div>
                           <div className="text-right ml-2">
-                            <span className="text-sm font-medium text-teal-400">{tmItem.entry_count}</span>
+                            <span className="text-sm font-medium text-teal-400">
+                              {tmItem.entry_count}
+                            </span>
                             <p className="text-xs text-slate-500">entries</p>
                           </div>
                         </div>
@@ -1297,7 +1430,9 @@ export default function CATToolPage() {
                               e.stopPropagation()
                               if (confirm(`Delete "${tmItem.name}"?`)) {
                                 await deleteTM(tmItem.id)
-                                setTmList((prev) => prev.filter((t) => t.id !== tmItem.id))
+                                setTmList((prev) =>
+                                  prev.filter((t) => t.id !== tmItem.id)
+                                )
                                 if (selectedTM?.id === tmItem.id) {
                                   setSelectedTM(null)
                                   setTmEntries([])
@@ -1331,9 +1466,13 @@ export default function CATToolPage() {
                     <div className="bg-slate-800 rounded-xl p-6 mb-4">
                       <div className="flex items-start justify-between mb-4">
                         <div>
-                          <h2 className="text-2xl font-bold text-teal-400">{selectedTM.name}</h2>
+                          <h2 className="text-2xl font-bold text-teal-400">
+                            {selectedTM.name}
+                          </h2>
                           {selectedTM.note && (
-                            <p className="text-slate-400 mt-1">{selectedTM.note}</p>
+                            <p className="text-slate-400 mt-1">
+                              {selectedTM.note}
+                            </p>
                           )}
                         </div>
                         <div className="flex gap-2">
@@ -1353,33 +1492,49 @@ export default function CATToolPage() {
 
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="bg-slate-700/50 rounded-lg p-3">
-                          <p className="text-xs text-slate-500 mb-1">Source Language</p>
+                          <p className="text-xs text-slate-500 mb-1">
+                            Source Language
+                          </p>
                           <p className="font-medium text-teal-300">
-                            {getLanguageByCode(selectedTM.source_lang)?.name || selectedTM.source_lang.toUpperCase()}
+                            {getLanguageByCode(selectedTM.source_lang)?.name ||
+                              selectedTM.source_lang.toUpperCase()}
                           </p>
                         </div>
                         <div className="bg-slate-700/50 rounded-lg p-3">
-                          <p className="text-xs text-slate-500 mb-1">Target Languages</p>
+                          <p className="text-xs text-slate-500 mb-1">
+                            Target Languages
+                          </p>
                           <div className="flex flex-wrap gap-1">
                             {selectedTM.target_langs.map((lang) => (
-                              <span key={lang} className="text-sm font-medium text-teal-300">
-                                {getLanguageByCode(lang)?.name || lang.toUpperCase()}
+                              <span
+                                key={lang}
+                                className="text-sm font-medium text-teal-300"
+                              >
+                                {getLanguageByCode(lang)?.name ||
+                                  lang.toUpperCase()}
                               </span>
                             ))}
                           </div>
                         </div>
                         <div className="bg-slate-700/50 rounded-lg p-3">
                           <p className="text-xs text-slate-500 mb-1">Entries</p>
-                          <p className="font-medium text-2xl text-white">{selectedTM.entry_count}</p>
+                          <p className="font-medium text-2xl text-white">
+                            {selectedTM.entry_count}
+                          </p>
                         </div>
                         <div className="bg-slate-700/50 rounded-lg p-3">
                           <p className="text-xs text-slate-500 mb-1">Created</p>
                           <p className="font-medium text-slate-300">
-                            {new Date(selectedTM.created_at).toLocaleDateString()}
+                            {new Date(
+                              selectedTM.created_at
+                            ).toLocaleDateString()}
                           </p>
                           {selectedTM.updated_at !== selectedTM.created_at && (
                             <p className="text-xs text-slate-500 mt-1">
-                              Updated: {new Date(selectedTM.updated_at).toLocaleDateString()}
+                              Updated:{" "}
+                              {new Date(
+                                selectedTM.updated_at
+                              ).toLocaleDateString()}
                             </p>
                           )}
                         </div>
@@ -1387,9 +1542,12 @@ export default function CATToolPage() {
 
                       {selectedTM.client_id && (
                         <div className="mt-4 pt-4 border-t border-slate-700">
-                          <p className="text-xs text-slate-500 mb-1">Associated Client</p>
+                          <p className="text-xs text-slate-500 mb-1">
+                            Associated Client
+                          </p>
                           <p className="font-medium text-slate-300">
-                            {clients.find(c => c.id === selectedTM.client_id)?.name || "Unknown Client"}
+                            {clients.find((c) => c.id === selectedTM.client_id)
+                              ?.name || "Unknown Client"}
                           </p>
                         </div>
                       )}
@@ -1399,7 +1557,9 @@ export default function CATToolPage() {
                     <div className="bg-slate-800 rounded-xl p-6">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold text-white">TM Entries</h3>
+                          <h3 className="text-lg font-semibold text-white">
+                            TM Entries
+                          </h3>
                           {tmEditMode && (
                             <span className="px-2 py-0.5 bg-teal-600/30 text-teal-300 text-xs rounded">
                               Edit Mode
@@ -1424,22 +1584,34 @@ export default function CATToolPage() {
                               placeholder={`Source (${selectedTM.source_lang})`}
                               value={newTmEntry.source}
                               onChange={(e) =>
-                                setNewTmEntry((prev) => ({ ...prev, source: e.target.value }))
+                                setNewTmEntry((prev) => ({
+                                  ...prev,
+                                  source: e.target.value,
+                                }))
                               }
                               className="flex-1 bg-slate-700 rounded-lg px-4 py-2 text-sm"
                             />
                             <input
                               type="text"
-                              placeholder={`Target (${selectedTM.target_langs[0] || targetLang})`}
+                              placeholder={`Target (${
+                                selectedTM.target_langs[0] || targetLang
+                              })`}
                               value={newTmEntry.target}
                               onChange={(e) =>
-                                setNewTmEntry((prev) => ({ ...prev, target: e.target.value }))
+                                setNewTmEntry((prev) => ({
+                                  ...prev,
+                                  target: e.target.value,
+                                }))
                               }
                               className="flex-1 bg-slate-700 rounded-lg px-4 py-2 text-sm"
                             />
                             <button
                               onClick={async () => {
-                                if (newTmEntry.source && newTmEntry.target && selectedTM) {
+                                if (
+                                  newTmEntry.source &&
+                                  newTmEntry.target &&
+                                  selectedTM
+                                ) {
                                   const tmEntry: TMEntry = {
                                     source: newTmEntry.source,
                                     target: newTmEntry.target,
@@ -1450,13 +1622,18 @@ export default function CATToolPage() {
                                     selectedTM.target_langs[0] || targetLang
                                   )
                                   if (success) {
-                                    const entries = await fetchTMEntries(selectedTM.id)
+                                    const entries = await fetchTMEntries(
+                                      selectedTM.id
+                                    )
                                     setTmEntries(entries)
                                     setTm((prev) => [...prev, tmEntry])
                                     setTmList((prev) =>
                                       prev.map((t) =>
                                         t.id === selectedTM.id
-                                          ? { ...t, entry_count: entries.length }
+                                          ? {
+                                              ...t,
+                                              entry_count: entries.length,
+                                            }
                                           : t
                                       )
                                     )
@@ -1473,7 +1650,9 @@ export default function CATToolPage() {
 
                           {/* TMX Import */}
                           <div className="flex items-center gap-3 bg-slate-700/30 p-3 rounded-xl">
-                            <span className="text-sm text-slate-400">Import from file:</span>
+                            <span className="text-sm text-slate-400">
+                              Import from file:
+                            </span>
                             <label className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm cursor-pointer transition">
                               📁 Upload TMX
                               <input
@@ -1486,11 +1665,16 @@ export default function CATToolPage() {
 
                                   const reader = new FileReader()
                                   reader.onload = async (event) => {
-                                    const content = event.target?.result as string
+                                    const content = event.target
+                                      ?.result as string
+                                    console.log(content)
                                     const imported = parseTmxFile(content)
+                                    console.log(imported)
 
                                     if (imported.length === 0) {
-                                      toast.error("No entries found in TMX file")
+                                      toast.error(
+                                        "No entries found in TMX file"
+                                      )
                                       return
                                     }
 
@@ -1501,18 +1685,25 @@ export default function CATToolPage() {
                                     )
 
                                     // Refresh entries
-                                    const entries = await fetchTMEntries(selectedTM.id)
+                                    const entries = await fetchTMEntries(
+                                      selectedTM.id
+                                    )
                                     setTmEntries(entries)
                                     setTm((prev) => [...prev, ...imported])
                                     setTmList((prev) =>
                                       prev.map((t) =>
                                         t.id === selectedTM.id
-                                          ? { ...t, entry_count: entries.length }
+                                          ? {
+                                              ...t,
+                                              entry_count: entries.length,
+                                            }
                                           : t
                                       )
                                     )
 
-                                    toast.success(`${savedCount} entries imported from TMX`)
+                                    toast.success(
+                                      `${savedCount} entries imported from TMX`
+                                    )
                                   }
                                   reader.readAsText(file)
                                   e.target.value = ""
@@ -1526,86 +1717,114 @@ export default function CATToolPage() {
                         </div>
                       )}
 
-                    {/* Entries Table */}
-                    {tmEntries.filter(
-                      (e) =>
-                        e.source.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                        e.target.toLowerCase().includes(searchTerm.toLowerCase())
-                    ).length === 0 ? (
-                      <div className="text-slate-500 text-center py-12">
-                        <div className="text-6xl mb-4">📝</div>
-                        <p className="text-lg">
-                          {searchTerm ? "No entries found" : "No entries yet"}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="flex-1 overflow-auto bg-slate-700/30 rounded-xl">
-                        <table className="w-full">
-                          <thead className="bg-slate-700 sticky top-0">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-sm text-slate-300 w-12">#</th>
-                              <th className="px-4 py-3 text-left text-sm text-slate-300">
-                                Source ({selectedTM.source_lang})
-                              </th>
-                              <th className="px-4 py-3 text-left text-sm text-slate-300">
-                                Target ({selectedTM.target_langs.join(", ")})
-                              </th>
-                              {tmEditMode && (
-                                <th className="px-4 py-3 text-right text-sm text-slate-300 w-20">
-                                  Actions
+                      {/* Entries Table */}
+                      {tmEntries.filter(
+                        (e) =>
+                          e.source
+                            .toLowerCase()
+                            .includes(searchTerm.toLowerCase()) ||
+                          e.target
+                            .toLowerCase()
+                            .includes(searchTerm.toLowerCase())
+                      ).length === 0 ? (
+                        <div className="text-slate-500 text-center py-12">
+                          <div className="text-6xl mb-4">📝</div>
+                          <p className="text-lg">
+                            {searchTerm ? "No entries found" : "No entries yet"}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex-1 overflow-auto bg-slate-700/30 rounded-xl">
+                          <table className="w-full">
+                            <thead className="bg-slate-700 sticky top-0">
+                              <tr>
+                                <th className="px-4 py-3 text-left text-sm text-slate-300 w-12">
+                                  #
                                 </th>
-                              )}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {tmEntries
-                              .filter(
-                                (e) =>
-                                  e.source.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                  e.target.toLowerCase().includes(searchTerm.toLowerCase())
-                              )
-                              .map((entry, idx) => (
-                                <tr
-                                  key={entry.id}
-                                  className="border-t border-slate-700 hover:bg-slate-700/50"
-                                >
-                                  <td className="px-4 py-3 text-slate-500 text-sm">{idx + 1}</td>
-                                  <td className="px-4 py-3 text-sm">{entry.source}</td>
-                                  <td className="px-4 py-3 text-sm text-slate-300">{entry.target}</td>
-                                  {tmEditMode && (
-                                    <td className="px-4 py-3 text-right">
-                                      <button
-                                        onClick={async () => {
-                                          if (confirm("Delete this entry?")) {
-                                            await deleteTMEntryById(entry.id, selectedTM.id)
-                                            setTmEntries((prev) =>
-                                              prev.filter((e) => e.id !== entry.id)
-                                            )
-                                            setTm((prev) =>
-                                              prev.filter((e) => e.source !== entry.source)
-                                            )
-                                            setTmList((prev) =>
-                                              prev.map((t) =>
-                                                t.id === selectedTM.id
-                                                  ? { ...t, entry_count: t.entry_count - 1 }
-                                                  : t
-                                              )
-                                            )
-                                            toast.success("Entry deleted")
-                                          }
-                                        }}
-                                        className="text-red-400 hover:text-red-300 text-sm"
-                                      >
-                                        🗑️
-                                      </button>
+                                <th className="px-4 py-3 text-left text-sm text-slate-300">
+                                  Source ({selectedTM.source_lang})
+                                </th>
+                                <th className="px-4 py-3 text-left text-sm text-slate-300">
+                                  Target ({selectedTM.target_langs.join(", ")})
+                                </th>
+                                {tmEditMode && (
+                                  <th className="px-4 py-3 text-right text-sm text-slate-300 w-20">
+                                    Actions
+                                  </th>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {tmEntries
+                                .filter(
+                                  (e) =>
+                                    e.source
+                                      .toLowerCase()
+                                      .includes(searchTerm.toLowerCase()) ||
+                                    e.target
+                                      .toLowerCase()
+                                      .includes(searchTerm.toLowerCase())
+                                )
+                                .map((entry, idx) => (
+                                  <tr
+                                    key={entry.id}
+                                    className="border-t border-slate-700 hover:bg-slate-700/50"
+                                  >
+                                    <td className="px-4 py-3 text-slate-500 text-sm">
+                                      {idx + 1}
                                     </td>
-                                  )}
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+                                    <td className="px-4 py-3 text-sm">
+                                      {entry.source}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-slate-300">
+                                      {entry.target}
+                                    </td>
+                                    {tmEditMode && (
+                                      <td className="px-4 py-3 text-right">
+                                        <button
+                                          onClick={async () => {
+                                            if (confirm("Delete this entry?")) {
+                                              await deleteTMEntryById(
+                                                entry.id,
+                                                selectedTM.id
+                                              )
+                                              setTmEntries((prev) =>
+                                                prev.filter(
+                                                  (e) => e.id !== entry.id
+                                                )
+                                              )
+                                              setTm((prev) =>
+                                                prev.filter(
+                                                  (e) =>
+                                                    e.source !== entry.source
+                                                )
+                                              )
+                                              setTmList((prev) =>
+                                                prev.map((t) =>
+                                                  t.id === selectedTM.id
+                                                    ? {
+                                                        ...t,
+                                                        entry_count:
+                                                          t.entry_count - 1,
+                                                      }
+                                                    : t
+                                                )
+                                              )
+                                              toast.success("Entry deleted")
+                                            }
+                                          }}
+                                          className="text-red-400 hover:text-red-300 text-sm"
+                                        >
+                                          🗑️
+                                        </button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1661,10 +1880,14 @@ export default function CATToolPage() {
                       setTermbase((prev) => [...prev, newTerm])
                       // Save to Supabase if user is logged in
                       if (user && isConfigured) {
-                        const success = await addTermbaseEntry(newTerm, selectedClient)
+                        const success = await addTermbaseEntry(
+                          newTerm,
+                          selectedClient
+                        )
                         if (success) {
                           // Refresh termbaseDB to get the new entry with ID
-                          const userTermbaseDB = await fetchUserTermbaseWithDetails(selectedClient)
+                          const userTermbaseDB =
+                            await fetchUserTermbaseWithDetails(selectedClient)
                           setTermbaseDB(userTermbaseDB)
                           toast.success("Term added")
                         }
@@ -1714,7 +1937,9 @@ export default function CATToolPage() {
                           <button
                             onClick={async () => {
                               // Find the DB entry with ID
-                              const dbEntry = termbaseDB.find((e) => e.source === term.source)
+                              const dbEntry = termbaseDB.find(
+                                (e) => e.source === term.source
+                              )
                               setTermbase((prev) =>
                                 prev.filter((_, i) => i !== idx)
                               )
@@ -1723,7 +1948,9 @@ export default function CATToolPage() {
                               )
                               // Delete from Supabase if user is logged in
                               if (user && isConfigured && dbEntry) {
-                                const success = await deleteTermbaseEntryById(dbEntry.id)
+                                const success = await deleteTermbaseEntryById(
+                                  dbEntry.id
+                                )
                                 if (success) {
                                   toast.success("Term deleted")
                                 }
@@ -1746,7 +1973,9 @@ export default function CATToolPage() {
           {!loading && view === "qa" && (
             <div className="space-y-6">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-teal-400">Quality Assurance</h2>
+                <h2 className="text-xl font-bold text-teal-400">
+                  Quality Assurance
+                </h2>
                 <div className="flex items-center gap-3">
                   <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
                     <input
@@ -1775,7 +2004,9 @@ export default function CATToolPage() {
 
               {/* QA Checks Toggle */}
               <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                <h3 className="text-sm font-medium text-slate-300 mb-3">QA Checks</h3>
+                <h3 className="text-sm font-medium text-slate-300 mb-3">
+                  QA Checks
+                </h3>
                 <div className="grid grid-cols-3 gap-3">
                   {qaChecks.map((check) => (
                     <label
@@ -1796,7 +2027,11 @@ export default function CATToolPage() {
                         }
                         className="rounded bg-slate-700 border-slate-600"
                       />
-                      <span className={check.enabled ? "text-slate-200" : "text-slate-500"}>
+                      <span
+                        className={
+                          check.enabled ? "text-slate-200" : "text-slate-500"
+                        }
+                      >
                         {check.name}
                       </span>
                       <span
@@ -1818,19 +2053,31 @@ export default function CATToolPage() {
               {qaIssues.length > 0 && (
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-                    <div className="text-slate-400 text-sm mb-1">Total Issues</div>
-                    <div className="text-3xl font-bold text-white">{qaIssues.length}</div>
+                    <div className="text-slate-400 text-sm mb-1">
+                      Total Issues
+                    </div>
+                    <div className="text-3xl font-bold text-white">
+                      {qaIssues.length}
+                    </div>
                   </div>
                   <div className="bg-slate-800 rounded-xl p-4 border border-red-900/50">
                     <div className="text-slate-400 text-sm mb-1">Errors</div>
                     <div className="text-3xl font-bold text-red-400">
-                      {qaIssues.filter((i) => i.severity === "error" && !i.ignored).length}
+                      {
+                        qaIssues.filter(
+                          (i) => i.severity === "error" && !i.ignored
+                        ).length
+                      }
                     </div>
                   </div>
                   <div className="bg-slate-800 rounded-xl p-4 border border-yellow-900/50">
                     <div className="text-slate-400 text-sm mb-1">Warnings</div>
                     <div className="text-3xl font-bold text-yellow-400">
-                      {qaIssues.filter((i) => i.severity === "warning" && !i.ignored).length}
+                      {
+                        qaIssues.filter(
+                          (i) => i.severity === "warning" && !i.ignored
+                        ).length
+                      }
                     </div>
                   </div>
                 </div>
@@ -1841,7 +2088,9 @@ export default function CATToolPage() {
                 <div className="h-96 flex items-center justify-center text-slate-500">
                   <div className="text-center">
                     <div className="text-8xl mb-6">🔍</div>
-                    <p className="text-2xl font-medium mb-2">Upload a file to run QA</p>
+                    <p className="text-2xl font-medium mb-2">
+                      Upload a file to run QA
+                    </p>
                   </div>
                 </div>
               ) : qaIssues.length === 0 ? (
@@ -1849,7 +2098,9 @@ export default function CATToolPage() {
                   <div className="text-center">
                     <div className="text-8xl mb-6">✅</div>
                     <p className="text-2xl font-medium mb-2">No issues found</p>
-                    <p className="text-sm">Click &quot;Run QA Check&quot; to analyze your translation</p>
+                    <p className="text-sm">
+                      Click &quot;Run QA Check&quot; to analyze your translation
+                    </p>
                   </div>
                 </div>
               ) : (
@@ -1857,19 +2108,33 @@ export default function CATToolPage() {
                   <table className="w-full">
                     <thead className="bg-slate-700">
                       <tr>
-                        <th className="px-4 py-3 text-left text-sm text-slate-300 w-16">Seg</th>
-                        <th className="px-4 py-3 text-left text-sm text-slate-300 w-28">Type</th>
-                        <th className="px-4 py-3 text-left text-sm text-slate-300">Message</th>
-                        <th className="px-4 py-3 text-left text-sm text-slate-300">Source</th>
-                        <th className="px-4 py-3 text-left text-sm text-slate-300">Target</th>
-                        <th className="px-4 py-3 text-right text-sm text-slate-300 w-24">Actions</th>
+                        <th className="px-4 py-3 text-left text-sm text-slate-300 w-16">
+                          Seg
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm text-slate-300 w-28">
+                          Type
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm text-slate-300">
+                          Message
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm text-slate-300">
+                          Source
+                        </th>
+                        <th className="px-4 py-3 text-left text-sm text-slate-300">
+                          Target
+                        </th>
+                        <th className="px-4 py-3 text-right text-sm text-slate-300 w-24">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {qaIssues
                         .filter((issue) => !issue.ignored)
                         .map((issue, idx) => {
-                          const segment = segments.find((s) => s.id === issue.segmentId)
+                          const segment = segments.find(
+                            (s) => s.id === issue.segmentId
+                          )
                           return (
                             <tr
                               key={idx}
@@ -1878,7 +2143,9 @@ export default function CATToolPage() {
                               <td className="px-4 py-3">
                                 <button
                                   onClick={() => {
-                                    const segIdx = segments.findIndex((s) => s.id === issue.segmentId)
+                                    const segIdx = segments.findIndex(
+                                      (s) => s.id === issue.segmentId
+                                    )
                                     if (segIdx !== -1) {
                                       setActiveSegment(segIdx)
                                       setView("editor")
@@ -1901,7 +2168,9 @@ export default function CATToolPage() {
                                   {getIssueTypeName(issue.type)}
                                 </span>
                               </td>
-                              <td className="px-4 py-3 text-sm text-slate-300">{issue.message}</td>
+                              <td className="px-4 py-3 text-sm text-slate-300">
+                                {issue.message}
+                              </td>
                               <td className="px-4 py-3 text-sm text-slate-400 max-w-[200px] truncate">
                                 {segment?.source || "-"}
                               </td>
@@ -1913,7 +2182,9 @@ export default function CATToolPage() {
                                   onClick={() =>
                                     setQaIssues((prev) =>
                                       prev.map((i, iIdx) =>
-                                        iIdx === idx ? { ...i, ignored: true } : i
+                                        iIdx === idx
+                                          ? { ...i, ignored: true }
+                                          : i
                                       )
                                     )
                                   }
@@ -1940,7 +2211,9 @@ export default function CATToolPage() {
                     </span>
                     <button
                       onClick={() =>
-                        setQaIssues((prev) => prev.map((i) => ({ ...i, ignored: false })))
+                        setQaIssues((prev) =>
+                          prev.map((i) => ({ ...i, ignored: false }))
+                        )
                       }
                       className="text-xs text-slate-400 hover:text-slate-300"
                     >
@@ -1958,10 +2231,14 @@ export default function CATToolPage() {
       {showClientModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-slate-800 rounded-xl p-6 w-96 border border-slate-700">
-            <h3 className="text-lg font-bold text-teal-400 mb-4">Create New Client</h3>
+            <h3 className="text-lg font-bold text-teal-400 mb-4">
+              Create New Client
+            </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-slate-300 mb-1">Client Name *</label>
+                <label className="block text-sm text-slate-300 mb-1">
+                  Client Name *
+                </label>
                 <input
                   type="text"
                   value={newClientName}
@@ -1971,7 +2248,9 @@ export default function CATToolPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm text-slate-300 mb-1">Description</label>
+                <label className="block text-sm text-slate-300 mb-1">
+                  Description
+                </label>
                 <input
                   type="text"
                   value={newClientDesc}
@@ -2031,10 +2310,14 @@ export default function CATToolPage() {
       {showTMModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-slate-800 rounded-xl p-6 w-[500px] max-h-[90vh] overflow-y-auto border border-slate-700">
-            <h3 className="text-lg font-bold text-teal-400 mb-4">Create New Translation Memory</h3>
+            <h3 className="text-lg font-bold text-teal-400 mb-4">
+              Create New Translation Memory
+            </h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-slate-300 mb-1">TM Name *</label>
+                <label className="block text-sm text-slate-300 mb-1">
+                  TM Name *
+                </label>
                 <input
                   type="text"
                   value={newTMName}
@@ -2045,26 +2328,41 @@ export default function CATToolPage() {
               </div>
 
               <div>
-                <label className="block text-sm text-slate-300 mb-1">Source Language *</label>
+                <label className="block text-sm text-slate-300 mb-1">
+                  Source Language *
+                </label>
                 <Select value={sourceLang} onValueChange={setSourceLang}>
                   <SelectTrigger className="w-full bg-slate-700 border-slate-600">
                     <SelectValue placeholder="Select source language" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700 max-h-[300px]">
                     <SelectGroup>
-                      <SelectLabel className="text-slate-400">Common Languages</SelectLabel>
+                      <SelectLabel className="text-slate-400">
+                        Common Languages
+                      </SelectLabel>
                       {COMMON_LANGUAGES.map((lang) => (
-                        <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700">
+                        <SelectItem
+                          key={lang.code}
+                          value={lang.code}
+                          className="text-slate-200 focus:bg-slate-700"
+                        >
                           {lang.name} ({lang.nativeName})
                         </SelectItem>
                       ))}
                     </SelectGroup>
                     <SelectGroup>
-                      <SelectLabel className="text-slate-400">All Languages</SelectLabel>
+                      <SelectLabel className="text-slate-400">
+                        All Languages
+                      </SelectLabel>
                       {ISO_639_1_LANGUAGES.filter(
-                        (lang) => !COMMON_LANGUAGES.some((c) => c.code === lang.code)
+                        (lang) =>
+                          !COMMON_LANGUAGES.some((c) => c.code === lang.code)
                       ).map((lang) => (
-                        <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700">
+                        <SelectItem
+                          key={lang.code}
+                          value={lang.code}
+                          className="text-slate-200 focus:bg-slate-700"
+                        >
                           {lang.name} ({lang.nativeName})
                         </SelectItem>
                       ))}
@@ -2074,7 +2372,9 @@ export default function CATToolPage() {
               </div>
 
               <div>
-                <label className="block text-sm text-slate-300 mb-1">Target Languages *</label>
+                <label className="block text-sm text-slate-300 mb-1">
+                  Target Languages *
+                </label>
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-2">
                     {newTMTargetLangs.map((langCode) => {
@@ -2086,7 +2386,11 @@ export default function CATToolPage() {
                         >
                           {lang?.name || langCode}
                           <button
-                            onClick={() => setNewTMTargetLangs((prev) => prev.filter((l) => l !== langCode))}
+                            onClick={() =>
+                              setNewTMTargetLangs((prev) =>
+                                prev.filter((l) => l !== langCode)
+                              )
+                            }
                             className="hover:text-red-400"
                           >
                             ×
@@ -2109,19 +2413,36 @@ export default function CATToolPage() {
                     </SelectTrigger>
                     <SelectContent className="bg-slate-800 border-slate-700 max-h-[300px]">
                       <SelectGroup>
-                        <SelectLabel className="text-slate-400">Common Languages</SelectLabel>
-                        {COMMON_LANGUAGES.filter((lang) => !newTMTargetLangs.includes(lang.code)).map((lang) => (
-                          <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700">
+                        <SelectLabel className="text-slate-400">
+                          Common Languages
+                        </SelectLabel>
+                        {COMMON_LANGUAGES.filter(
+                          (lang) => !newTMTargetLangs.includes(lang.code)
+                        ).map((lang) => (
+                          <SelectItem
+                            key={lang.code}
+                            value={lang.code}
+                            className="text-slate-200 focus:bg-slate-700"
+                          >
                             {lang.name} ({lang.nativeName})
                           </SelectItem>
                         ))}
                       </SelectGroup>
                       <SelectGroup>
-                        <SelectLabel className="text-slate-400">All Languages</SelectLabel>
+                        <SelectLabel className="text-slate-400">
+                          All Languages
+                        </SelectLabel>
                         {ISO_639_1_LANGUAGES.filter(
-                          (lang) => !COMMON_LANGUAGES.some((c) => c.code === lang.code) && !newTMTargetLangs.includes(lang.code)
+                          (lang) =>
+                            !COMMON_LANGUAGES.some(
+                              (c) => c.code === lang.code
+                            ) && !newTMTargetLangs.includes(lang.code)
                         ).map((lang) => (
-                          <SelectItem key={lang.code} value={lang.code} className="text-slate-200 focus:bg-slate-700">
+                          <SelectItem
+                            key={lang.code}
+                            value={lang.code}
+                            className="text-slate-200 focus:bg-slate-700"
+                          >
                             {lang.name} ({lang.nativeName})
                           </SelectItem>
                         ))}
@@ -2132,20 +2453,31 @@ export default function CATToolPage() {
               </div>
 
               <div>
-                <label className="block text-sm text-slate-300 mb-1">Client (Optional)</label>
+                <label className="block text-sm text-slate-300 mb-1">
+                  Client (Optional)
+                </label>
                 <Select
                   value={selectedClient || "__none__"}
-                  onValueChange={(value) => setSelectedClient(value === "__none__" ? null : value)}
+                  onValueChange={(value) =>
+                    setSelectedClient(value === "__none__" ? null : value)
+                  }
                 >
                   <SelectTrigger className="w-full bg-slate-700 border-slate-600">
                     <SelectValue placeholder="Select client (optional)" />
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
-                    <SelectItem value="__none__" className="text-slate-400 focus:bg-slate-700">
+                    <SelectItem
+                      value="__none__"
+                      className="text-slate-400 focus:bg-slate-700"
+                    >
                       No client
                     </SelectItem>
                     {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id} className="text-slate-200 focus:bg-slate-700">
+                      <SelectItem
+                        key={client.id}
+                        value={client.id}
+                        className="text-slate-200 focus:bg-slate-700"
+                      >
                         {client.name}
                       </SelectItem>
                     ))}
@@ -2154,7 +2486,9 @@ export default function CATToolPage() {
               </div>
 
               <div>
-                <label className="block text-sm text-slate-300 mb-1">Note (Optional)</label>
+                <label className="block text-sm text-slate-300 mb-1">
+                  Note (Optional)
+                </label>
                 <textarea
                   value={newTMNote}
                   onChange={(e) => setNewTMNote(e.target.value)}
