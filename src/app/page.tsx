@@ -356,7 +356,7 @@ export default function CATToolPage() {
   }
 
   // Update segment translation
-  const updateSegment = (id: number, target: string) => {
+  const updateSegment = useCallback((id: number, target: string) => {
     setSegments((prev) =>
       prev.map((seg) =>
         seg.id === id
@@ -364,16 +364,18 @@ export default function CATToolPage() {
           : seg
       )
     )
-  }
+  }, [])
 
   // Confirm segment and add to TM
-  const confirmSegment = (id: number) => {
-    const seg = segments.find((s) => s.id === id)
-    if (seg && seg.target) {
+  const confirmSegment = useCallback((id: number) => {
+    setSegments((prevSegments) => {
+      const seg = prevSegments.find((s) => s.id === id)
+      if (!seg || !seg.target) return prevSegments
+
       // Auto-propagate to identical source segments
       let updatedSegments: Segment[]
       if (autoPropagation) {
-        updatedSegments = segments.map((s) => {
+        updatedSegments = prevSegments.map((s) => {
           if (s.id === id) {
             return { ...s, status: "confirmed" as const }
           }
@@ -383,15 +385,13 @@ export default function CATToolPage() {
           }
           return s
         })
-        setSegments(updatedSegments)
       } else {
-        updatedSegments = segments.map((s) =>
+        updatedSegments = prevSegments.map((s) =>
           s.id === id ? { ...s, status: "confirmed" as const } : s
         )
-        setSegments(updatedSegments)
       }
 
-      // Run instant QA on confirmed segment
+      // Run instant QA on confirmed segment (side effect, but safe here)
       if (instantQA) {
         const enabledTypes = qaChecks
           .filter((c) => c.enabled)
@@ -414,8 +414,8 @@ export default function CATToolPage() {
 
       // Add to TM with context if not already exists
       if (!tm.find((entry) => entry.source === seg.source)) {
-        const segIndex = segments.findIndex((s) => s.id === id)
-        const tmEntryWithContext = createTMEntryWithContext(segIndex, segments)
+        const segIndex = prevSegments.findIndex((s) => s.id === id)
+        const tmEntryWithContext = createTMEntryWithContext(segIndex, updatedSegments)
         setTm((prev) => [...prev, tmEntryWithContext])
 
         // Save to Supabase if user is logged in and a TM is selected
@@ -429,17 +429,19 @@ export default function CATToolPage() {
       }
 
       // Move to next unconfirmed segment
-      const currentIndex = segments.findIndex((s) => s.id === id)
-      const nextUnconfirmed = segments.findIndex(
+      const currentIndex = prevSegments.findIndex((s) => s.id === id)
+      const nextUnconfirmed = updatedSegments.findIndex(
         (s, idx) => idx > currentIndex && s.status !== "confirmed"
       )
       if (nextUnconfirmed !== -1) {
         setActiveSegment(nextUnconfirmed)
-      } else if (currentIndex < segments.length - 1) {
+      } else if (currentIndex < prevSegments.length - 1) {
         setActiveSegment(currentIndex + 1)
       }
-    }
-  }
+
+      return updatedSegments
+    })
+  }, [autoPropagation, instantQA, qaChecks, termbase, tm, user, isConfigured, selectedTM, addTMEntryMutation, targetLang])
 
   // Navigate between segments
   const navigateSegment = useCallback(
@@ -454,9 +456,9 @@ export default function CATToolPage() {
   )
 
   // Apply TM match
-  const applyTmMatch = (segId: number, tmEntry: TMEntry) => {
+  const applyTmMatch = useCallback((segId: number, tmEntry: TMEntry) => {
     updateSegment(segId, tmEntry.target)
-  }
+  }, [updateSegment])
 
   // Apply all 100%+ TM matches (includes 101% context matches)
   const applyAll100Matches = () => {
