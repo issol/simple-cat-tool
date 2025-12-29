@@ -688,10 +688,7 @@ export default function CATToolPage() {
                 onValueChange={(value) => setSourceLang(value)}
               >
                 <SelectTrigger className="w-full bg-slate-700 border-slate-600 text-sm h-9">
-                  <SelectValue>
-                    {getLanguageByCode(sourceLang)?.name ||
-                      sourceLang.toUpperCase()}
-                  </SelectValue>
+                  <SelectValue placeholder="Select language" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 max-h-[300px]">
                   <SelectGroup>
@@ -740,10 +737,7 @@ export default function CATToolPage() {
                 onValueChange={(value) => setTargetLang(value)}
               >
                 <SelectTrigger className="w-full bg-slate-700 border-slate-600 text-sm h-9">
-                  <SelectValue>
-                    {getLanguageByCode(targetLang)?.name ||
-                      targetLang.toUpperCase()}
-                  </SelectValue>
+                  <SelectValue placeholder="Select language" />
                 </SelectTrigger>
                 <SelectContent className="bg-slate-800 border-slate-700 max-h-[300px]">
                   <SelectGroup>
