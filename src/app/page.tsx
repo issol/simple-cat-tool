@@ -368,80 +368,74 @@ export default function CATToolPage() {
 
   // Confirm segment and add to TM
   const confirmSegment = useCallback((id: number) => {
-    setSegments((prevSegments) => {
-      const seg = prevSegments.find((s) => s.id === id)
-      if (!seg || !seg.target) return prevSegments
+    const seg = segments.find((s) => s.id === id)
+    if (!seg || !seg.target) return
 
-      // Auto-propagate to identical source segments
-      let updatedSegments: Segment[]
-      if (autoPropagation) {
-        updatedSegments = prevSegments.map((s) => {
-          if (s.id === id) {
-            return { ...s, status: "confirmed" as const }
-          }
-          // Auto-propagate to segments with identical source (only if not confirmed)
-          if (s.source === seg.source && s.status !== "confirmed") {
-            return { ...s, target: seg.target, status: "translated" as const }
-          }
-          return s
-        })
-      } else {
-        updatedSegments = prevSegments.map((s) =>
-          s.id === id ? { ...s, status: "confirmed" as const } : s
-        )
-      }
-
-      // Run instant QA on confirmed segment (side effect, but safe here)
-      if (instantQA) {
-        const enabledTypes = qaChecks
-          .filter((c) => c.enabled)
-          .map((c) => c.type)
-        const confirmedSeg = updatedSegments.find((s) => s.id === id)
-        if (confirmedSeg) {
-          const newIssues = runSegmentQA(
-            confirmedSeg,
-            updatedSegments,
-            termbase,
-            enabledTypes
-          )
-          // Remove old issues for this segment and add new ones
-          setQaIssues((prev) => [
-            ...prev.filter((i) => i.segmentId !== id),
-            ...newIssues,
-          ])
+    // Auto-propagate to identical source segments
+    let updatedSegments: Segment[]
+    if (autoPropagation) {
+      updatedSegments = segments.map((s) => {
+        if (s.id === id) {
+          return { ...s, status: "confirmed" as const }
         }
-      }
-
-      // Add to TM with context if not already exists
-      if (!tm.find((entry) => entry.source === seg.source)) {
-        const segIndex = prevSegments.findIndex((s) => s.id === id)
-        const tmEntryWithContext = createTMEntryWithContext(segIndex, updatedSegments)
-        setTm((prev) => [...prev, tmEntryWithContext])
-
-        // Save to Supabase if user is logged in and a TM is selected
-        if (user && isConfigured && selectedTM) {
-          addTMEntryMutation.mutate({
-            tmId: selectedTM.id,
-            entry: tmEntryWithContext,
-            targetLang,
-          })
+        if (s.source === seg.source && s.status !== "confirmed") {
+          return { ...s, target: seg.target, status: "translated" as const }
         }
-      }
-
-      // Move to next unconfirmed segment
-      const currentIndex = prevSegments.findIndex((s) => s.id === id)
-      const nextUnconfirmed = updatedSegments.findIndex(
-        (s, idx) => idx > currentIndex && s.status !== "confirmed"
+        return s
+      })
+    } else {
+      updatedSegments = segments.map((s) =>
+        s.id === id ? { ...s, status: "confirmed" as const } : s
       )
-      if (nextUnconfirmed !== -1) {
-        setActiveSegment(nextUnconfirmed)
-      } else if (currentIndex < prevSegments.length - 1) {
-        setActiveSegment(currentIndex + 1)
-      }
+    }
+    setSegments(updatedSegments)
 
-      return updatedSegments
-    })
-  }, [autoPropagation, instantQA, qaChecks, termbase, tm, user, isConfigured, selectedTM, addTMEntryMutation, targetLang])
+    // Run instant QA on confirmed segment
+    if (instantQA) {
+      const enabledTypes = qaChecks
+        .filter((c) => c.enabled)
+        .map((c) => c.type)
+      const confirmedSeg = updatedSegments.find((s) => s.id === id)
+      if (confirmedSeg) {
+        const newIssues = runSegmentQA(
+          confirmedSeg,
+          updatedSegments,
+          termbase,
+          enabledTypes
+        )
+        setQaIssues((prev) => [
+          ...prev.filter((i) => i.segmentId !== id),
+          ...newIssues,
+        ])
+      }
+    }
+
+    // Add to TM with context if not already exists
+    if (!tm.find((entry) => entry.source === seg.source)) {
+      const segIndex = segments.findIndex((s) => s.id === id)
+      const tmEntryWithContext = createTMEntryWithContext(segIndex, updatedSegments)
+      setTm((prev) => [...prev, tmEntryWithContext])
+
+      if (user && isConfigured && selectedTM) {
+        addTMEntryMutation.mutate({
+          tmId: selectedTM.id,
+          entry: tmEntryWithContext,
+          targetLang,
+        })
+      }
+    }
+
+    // Move to next unconfirmed segment
+    const currentIndex = segments.findIndex((s) => s.id === id)
+    const nextUnconfirmed = updatedSegments.findIndex(
+      (s, idx) => idx > currentIndex && s.status !== "confirmed"
+    )
+    if (nextUnconfirmed !== -1) {
+      setActiveSegment(nextUnconfirmed)
+    } else if (currentIndex < segments.length - 1) {
+      setActiveSegment(currentIndex + 1)
+    }
+  }, [segments, autoPropagation, instantQA, qaChecks, termbase, tm, user, isConfigured, selectedTM, addTMEntryMutation, targetLang])
 
   // Navigate between segments
   const navigateSegment = useCallback(
